@@ -547,7 +547,6 @@
       }
       
       var proyectosPorMes = data.proyectosPorMes;
-      var proyectoEmpleadoMes = data.proyectoEmpleadoMes || {}; // NUEVA ESTRUCTURA
       var totales = data.totales;
       var proyectos = data.proyectos;
       
@@ -626,299 +625,101 @@
       
       html += '</tbody></table></div></div>';
       
-      // ==================== TABLA: TODOS LOS EMPLEADOS VS MES-AÑO CON FILTROS ====================
-      html += '<div style="margin-top:48px;margin-bottom:48px;">';
-      html += '<div style="font-size:18px;font-weight:700;color:var(--primary-dark);margin-bottom:20px;padding-bottom:12px;border-bottom:3px solid var(--primary);">👥 Todos los Empleados vs Mes-Año</div>';
-      
-      // Panel de Filtros
-      html += '<div style="background:rgba(255,255,255,0.7);border:1px solid rgba(0,77,103,0.12);border-radius:12px;padding:20px;margin-bottom:20px;">';
-      html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;">';
-      
-      // Construir listas únicas para filtros
-      var direccionesSet = new Set();
-      var gerenciasSet = new Set();
-      var prorrogasSet = new Set();
-      
-      proyectos.forEach(function(proyecto) {
-        var empleadosDelProyecto = proyectoEmpleadoMes[proyecto] || {};
-        Object.keys(empleadosDelProyecto).forEach(function(nombreEmpleado) {
-          var emp = empleadosDelProyecto[nombreEmpleado];
-          if (emp.direccion) direccionesSet.add(emp.direccion);
-          if (emp.gerencia) gerenciasSet.add(emp.gerencia);
-          if (emp.prorrogas !== undefined && emp.prorrogas !== null) prorrogasSet.add(emp.prorrogas);
-        });
-      });
-      
-      var direcciones = Array.from(direccionesSet).sort();
-      var gerencias = Array.from(gerenciasSet).sort();
-      var prorrogasUnicas = Array.from(prorrogasSet).sort(function(a, b) { return a - b; });
-      
-      // Filtro por Proyecto
-      html += '<div class="field">';
-      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">📁 Proyecto</label>';
-      html += '<select id="filtroProyectoEmpleados" onchange="aplicarFiltrosEmpleados()">';
-      html += '<option value="">Todos</option>';
+      // ==================== DETALLE POR PROYECTO (BAJO DEMANDA) ====================
+      html += '<div style="margin-top:48px;">';
+      html += '<div style="font-size:18px;font-weight:700;color:var(--primary-dark);margin-bottom:20px;padding-bottom:12px;border-bottom:3px solid var(--primary);">👥 Detalle por Proyecto: Empleado vs Mes-Año</div>';
+      html += '<div class="row" style="margin-bottom:16px;">';
+      html += '<div class="field"><label>Proyecto</label><select id="selectProyectoDetalle">';
       proyectos.forEach(function(p) {
         html += '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>';
       });
       html += '</select></div>';
-      
-      // Filtro por Dirección
-      html += '<div class="field">';
-      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">🏢 Dirección</label>';
-      html += '<select id="filtroDireccion" onchange="aplicarFiltrosEmpleados()">';
-      html += '<option value="">Todas</option>';
-      direcciones.forEach(function(d) {
-        html += '<option value="' + escapeHtml(d) + '">' + escapeHtml(d) + '</option>';
-      });
-      html += '</select></div>';
-      
-      // Filtro por Gerencia
-      html += '<div class="field">';
-      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">👔 Gerencia</label>';
-      html += '<select id="filtroGerencia" onchange="aplicarFiltrosEmpleados()">';
-      html += '<option value="">Todas</option>';
-      gerencias.forEach(function(g) {
-        html += '<option value="' + escapeHtml(g) + '">' + escapeHtml(g) + '</option>';
-      });
-      html += '</select></div>';
-      
-      // Filtro por Empleado
-      html += '<div class="field">';
-      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">🔍 Empleado</label>';
-      html += '<input type="text" id="filtroNombreEmpleado" placeholder="Buscar..." onkeyup="aplicarFiltrosEmpleados()" />';
+      html += '<div class="field"><label>&nbsp;</label><button onclick="cargarDetalleProyectoGlobal()">Ver detalle</button></div>';
+      html += '</div>';
+      html += '<div id="detalleProyectoContainer" class="msg warn">Selecciona un proyecto y haz clic en "Ver detalle".</div>';
       html += '</div>';
       
-      // Filtro Fecha Desde
-      html += '<div class="field">';
-      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">📅 Desde</label>';
-      html += '<input type="month" id="filtroFechaDesde" onchange="aplicarFiltrosEmpleados()" />';
-      html += '</div>';
-      
-      // Filtro Fecha Hasta
-      html += '<div class="field">';
-      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">📅 Hasta</label>';
-      html += '<input type="month" id="filtroFechaHasta" onchange="aplicarFiltrosEmpleados()" />';
-      html += '</div>';
-      
-      // Filtro F. Terminación Desde
-      html += '<div class="field">';
-      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">📆 F.Terminación Desde</label>';
-      html += '<input type="date" id="filtroTerminacionDesde" onchange="aplicarFiltrosEmpleados()" />';
-      html += '</div>';
-      
-      // Filtro F. Terminación Hasta
-      html += '<div class="field">';
-      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">📆 F.Terminación Hasta</label>';
-      html += '<input type="date" id="filtroTerminacionHasta" onchange="aplicarFiltrosEmpleados()" />';
-      html += '</div>';
-      
-      // Filtro por Prórrogas
-      html += '<div class="field">';
-      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">📝 Prórrogas</label>';
-      html += '<select id="filtroProrrogas" onchange="aplicarFiltrosEmpleados()">';
-      html += '<option value="">Todas</option>';
-      prorrogasUnicas.forEach(function(p) {
-        html += '<option value="' + p + '">' + p + '</option>';
-      });
-      html += '</select></div>';
-      
-      // Botón Limpiar Filtros
-      html += '<div class="field" style="display:flex;align-items:flex-end;">';
-      html += '<button onclick="limpiarFiltrosEmpleados()" class="btnSecondary" style="width:100%;padding:12px;font-size:13px;">🔄 Limpiar</button>';
-      html += '</div>';
-      
-      html += '</div></div>';
-      
-      // Construir estructura de TODOS los empleados
-      var todosLosEmpleados = {};
-      
-      proyectos.forEach(function(proyecto) {
-        var empleadosDelProyecto = proyectoEmpleadoMes[proyecto] || {};
-        Object.keys(empleadosDelProyecto).forEach(function(nombreEmpleado) {
-          if (!todosLosEmpleados[nombreEmpleado]) {
-            todosLosEmpleados[nombreEmpleado] = {
-              cedula: empleadosDelProyecto[nombreEmpleado].cedula,
-              direccion: empleadosDelProyecto[nombreEmpleado].direccion,
-              gerencia: empleadosDelProyecto[nombreEmpleado].gerencia,
-              fTerminacion: empleadosDelProyecto[nombreEmpleado].fTerminacion,
-              prorrogas: empleadosDelProyecto[nombreEmpleado].prorrogas,
-              proyectos: [],
-              meses: {}
-            };
+      container.innerHTML = html;
+    }
+
+    function cargarDetalleProyectoGlobal() {
+      var proyecto = document.getElementById("selectProyectoDetalle")?.value || "";
+      var container = document.getElementById("detalleProyectoContainer");
+      if (!proyecto) {
+        container.innerHTML = "<div class='msg warn'>Selecciona un proyecto válido.</div>";
+        return;
+      }
+      container.innerHTML = "⏳ Cargando detalle del proyecto...";
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (!res || !res.ok) {
+            container.innerHTML = "<div class='msg err'>❌ Error: " + (res?.message || "Sin datos") + "</div>";
+            return;
           }
-          todosLosEmpleados[nombreEmpleado].proyectos.push(proyecto);
-          
-          // Sumar valores por mes
-          var mesesEmpleado = empleadosDelProyecto[nombreEmpleado].meses;
-          Object.keys(mesesEmpleado).forEach(function(mes) {
-            if (!todosLosEmpleados[nombreEmpleado].meses[mes]) {
-              todosLosEmpleados[nombreEmpleado].meses[mes] = 0;
-            }
-            todosLosEmpleados[nombreEmpleado].meses[mes] += mesesEmpleado[mes];
-          });
-        });
-      });
-      
-      var nombresEmpleadosTodos = Object.keys(todosLosEmpleados).sort();
-      
-      // Contador de resultados
-      html += '<div id="contadorResultados" style="margin-bottom:12px;font-size:13px;color:var(--text-muted);font-weight:500;">Mostrando ' + nombresEmpleadosTodos.length + ' empleado(s)</div>';
-      
-      // Tabla
-      html += '<div class="tableWrap" id="tablaEmpleadosGlobal">';
-      html += '<table class="tabla-compacta"><thead><tr>';
-      html += '<th style="position:sticky;left:0;background:#F8FAFB;z-index:10;min-width:180px;font-size:10px;">Empleado</th>';
-      html += '<th style="min-width:130px;font-size:9px;">Dirección</th>';
-      html += '<th style="min-width:130px;font-size:9px;">Gerencia</th>';
-      html += '<th style="min-width:110px;font-size:9px;">F. Terminación</th>';
-      html += '<th style="min-width:90px;font-size:9px;">Prórrogas</th>';
-      html += '<th style="min-width:200px;font-size:9px;">Proyecto(s)</th>';
-      
-      // Columnas de meses
+          renderDetalleProyectoGlobal(res.data);
+        })
+        .withFailureHandler(function(err) {
+          container.innerHTML = "<div class='msg err'>❌ Error: " + err + "</div>";
+        })
+        .getDashboardDetalleProyecto({ proyecto: proyecto });
+    }
+
+    function renderDetalleProyectoGlobal(data) {
+      var container = document.getElementById("detalleProyectoContainer");
+      if (!data || !data.empleados || !data.meses) {
+        container.innerHTML = "<div class='msg warn'>No hay datos para este proyecto.</div>";
+        return;
+      }
+
+      var empleados = data.empleados || {};
+      var nombresEmpleados = Object.keys(empleados).sort();
+      var meses = data.meses || [];
+
+      if (!nombresEmpleados.length) {
+        container.innerHTML = "<div class='msg warn'>No hay empleados asociados a este proyecto.</div>";
+        return;
+      }
+
+      var html = '';
+      html += '<div style="margin-bottom:16px;background:rgba(255,255,255,0.5);border-radius:16px;padding:24px;border:1px solid rgba(0,77,103,0.12);">';
+      html += '<div style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:16px;display:flex;align-items:center;gap:8px;">';
+      html += '<span style="font-size:20px;">🎯</span>';
+      html += '<span>' + escapeHtml(data.proyecto || "") + '</span>';
+      html += '<span style="margin-left:auto;font-size:13px;color:var(--text-muted);font-weight:500;">' + nombresEmpleados.length + ' empleado(s)</span>';
+      html += '</div>';
+      html += '<div class="tableWrap"><table class="tabla-compacta"><thead><tr>';
+      html += '<th style="position:sticky;left:0;background:#F8FAFB;z-index:10;min-width:200px;font-size:10px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">Empleado</th>';
+
       for (var i = 0; i < meses.length; i++) {
-        html += '<th class="col-mes" data-mes="' + meses[i] + '" style="min-width:95px;font-size:9px;">' + formatMes(meses[i]) + '</th>';
+        html += '<th style="min-width:100px;font-size:9px;">' + formatMes(meses[i]) + '</th>';
       }
-      html += '<th style="min-width:110px;background:rgba(0,77,103,0.05);font-weight:700;font-size:10px;">Total</th>';
-      html += '</tr></thead><tbody id="tbodyEmpleadosGlobal">';
-      
-      // Filas por empleado
-      nombresEmpleadosTodos.forEach(function(nombreEmpleado) {
-        var datosEmpleado = todosLosEmpleados[nombreEmpleado];
+      html += '<th style="min-width:120px;background:rgba(0,77,103,0.05);font-weight:700;font-size:10px;">Total</th>';
+      html += '</tr></thead><tbody>';
+
+      nombresEmpleados.forEach(function(nombreEmpleado) {
+        var datosEmpleado = empleados[nombreEmpleado];
         var totalEmpleado = 0;
-        var proyectosStr = datosEmpleado.proyectos.join(', ');
-        var fTermStr = datosEmpleado.fTerminacion ? formatDate(datosEmpleado.fTerminacion) : "—";
-        
-        html += '<tr class="fila-empleado" ';
-        html += 'data-empleado="' + escapeHtml(nombreEmpleado).toLowerCase() + '" ';
-        html += 'data-proyectos="' + escapeHtml(proyectosStr).toLowerCase() + '" ';
-        html += 'data-direccion="' + escapeHtml(datosEmpleado.direccion).toLowerCase() + '" ';
-        html += 'data-gerencia="' + escapeHtml(datosEmpleado.gerencia).toLowerCase() + '" ';
-        html += 'data-fterminacion="' + (datosEmpleado.fTerminacion || "") + '" ';
-        html += 'data-prorrogas="' + (datosEmpleado.prorrogas || 0) + '">';
-        
-        html += '<td style="position:sticky;left:0;background:#FFFFFF;font-weight:600;z-index:5;font-size:10px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">' + escapeHtml(nombreEmpleado) + '</td>';
-        html += '<td style="font-size:9px;color:var(--text-muted);">' + escapeHtml(datosEmpleado.direccion) + '</td>';
-        html += '<td style="font-size:9px;color:var(--text-muted);">' + escapeHtml(datosEmpleado.gerencia) + '</td>';
-        html += '<td style="font-size:9px;color:var(--text-muted);">' + fTermStr + '</td>';
-        html += '<td style="font-size:9px;text-align:center;font-weight:600;color:var(--primary);">' + (datosEmpleado.prorrogas || 0) + '</td>';
-        html += '<td style="font-size:9px;color:var(--text);">' + escapeHtml(proyectosStr) + '</td>';
-        
+        html += '<tr>';
+        html += '<td style="position:sticky;left:0;background:#FFFFFF;font-weight:500;z-index:5;font-size:10px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">' + escapeHtml(nombreEmpleado) + '</td>';
+
         for (var m = 0; m < meses.length; m++) {
           var mes = meses[m];
-          var valor = datosEmpleado.meses[mes] || 0;
+          var valor = (datosEmpleado.meses && datosEmpleado.meses[mes]) ? datosEmpleado.meses[mes] : 0;
           totalEmpleado += valor;
-          
+
           if (valor > 0) {
-            html += '<td class="num celda-mes" data-mes="' + mes + '" style="font-size:9px;background:rgba(0,168,150,0.05);">' + moneyCompact(valor) + '</td>';
+            html += '<td class="num" style="font-size:10px;background:rgba(0,168,150,0.05);">' + moneyCompact(valor) + '</td>';
           } else {
-            html += '<td class="num celda-mes" data-mes="' + mes + '" style="font-size:9px;color:var(--text-muted);">—</td>';
+            html += '<td class="num" style="font-size:10px;color:var(--text-muted);">—</td>';
           }
         }
-        
-        html += '<td class="num" style="font-weight:700;background:rgba(0,77,103,0.08);color:var(--primary);font-size:10px;">' + moneyCompact(totalEmpleado) + '</td>';
+
+        html += '<td class="num" style="font-weight:700;background:rgba(0,77,103,0.08);color:var(--primary);font-size:11px;">' + moneyCompact(totalEmpleado) + '</td>';
         html += '</tr>';
       });
-      
-      // Fila de totales
-      html += '<tr style="background:rgba(0,77,103,0.12);font-weight:700;" id="filaTotal">';
-      html += '<td colspan="6" style="position:sticky;left:0;background:rgba(0,77,103,0.12);z-index:5;font-size:10px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">TOTAL</td>';
-      
-      var granTotal = 0;
-      for (var m = 0; m < meses.length; m++) {
-        var mes = meses[m];
-        var totalMes = 0;
-        
-        nombresEmpleadosTodos.forEach(function(nombreEmpleado) {
-          totalMes += todosLosEmpleados[nombreEmpleado].meses[mes] || 0;
-        });
-        
-        granTotal += totalMes;
-        html += '<td class="num col-total-mes" data-mes="' + mes + '" style="color:var(--primary);font-size:9px;">' + moneyCompact(totalMes) + '</td>';
-      }
-      
-      html += '<td class="num" id="granTotalGeneral" style="font-size:11px;color:var(--primary);">' + moneyCompact(granTotal) + '</td>';
-      html += '</tr>';
-      
+
       html += '</tbody></table></div></div>';
-      
-      // ==================== TABLAS DETALLADAS POR PROYECTO ====================
-      html += '<div style="margin-top:48px;">';
-      html += '<div style="font-size:18px;font-weight:700;color:var(--primary-dark);margin-bottom:24px;padding-bottom:12px;border-bottom:3px solid var(--primary);">👥 Detalle por Proyecto: Empleado vs Mes-Año</div>';
-      
-      // Generar una tabla para cada proyecto
-      proyectos.forEach(function(proyecto) {
-        var empleadosDelProyecto = proyectoEmpleadoMes[proyecto] || {};
-        var nombresEmpleados = Object.keys(empleadosDelProyecto).sort();
-        
-        if (nombresEmpleados.length === 0) return; // Si no hay empleados, saltar
-        
-        html += '<div style="margin-bottom:40px;background:rgba(255,255,255,0.5);border-radius:16px;padding:24px;border:1px solid rgba(0,77,103,0.12);">';
-        html += '<div style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:16px;display:flex;align-items:center;gap:8px;">';
-        html += '<span style="font-size:20px;">🎯</span>';
-        html += '<span>' + escapeHtml(proyecto) + '</span>';
-        html += '<span style="margin-left:auto;font-size:13px;color:var(--text-muted);font-weight:500;">' + nombresEmpleados.length + ' empleado(s)</span>';
-        html += '</div>';
-        
-        html += '<div class="tableWrap"><table class="tabla-compacta"><thead><tr>';
-        html += '<th style="position:sticky;left:0;background:#F8FAFB;z-index:10;min-width:200px;font-size:10px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">Empleado</th>';
-        
-        // Columnas de meses
-        for (var i = 0; i < meses.length; i++) {
-          html += '<th style="min-width:100px;font-size:9px;">' + formatMes(meses[i]) + '</th>';
-        }
-        html += '<th style="min-width:120px;background:rgba(0,77,103,0.05);font-weight:700;font-size:10px;">Total</th>';
-        html += '</tr></thead><tbody>';
-        
-        // Filas por empleado
-        nombresEmpleados.forEach(function(nombreEmpleado) {
-          var datosEmpleado = empleadosDelProyecto[nombreEmpleado];
-          var totalEmpleado = 0;
-          
-          html += '<tr>';
-          html += '<td style="position:sticky;left:0;background:#FFFFFF;font-weight:500;z-index:5;font-size:10px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">' + escapeHtml(nombreEmpleado) + '</td>';
-          
-          for (var m = 0; m < meses.length; m++) {
-            var mes = meses[m];
-            var valor = datosEmpleado.meses[mes] || 0;
-            totalEmpleado += valor;
-            
-            if (valor > 0) {
-              html += '<td class="num" style="font-size:10px;background:rgba(0,168,150,0.05);">' + moneyCompact(valor) + '</td>';
-            } else {
-              html += '<td class="num" style="font-size:10px;color:var(--text-muted);">—</td>';
-            }
-          }
-          
-          html += '<td class="num" style="font-weight:700;background:rgba(0,77,103,0.08);color:var(--primary);font-size:11px;">' + moneyCompact(totalEmpleado) + '</td>';
-          html += '</tr>';
-        });
-        
-        // Fila de totales del proyecto
-        html += '<tr style="background:rgba(0,77,103,0.12);font-weight:700;">';
-        html += '<td style="position:sticky;left:0;background:rgba(0,77,103,0.15);z-index:5;font-size:10px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">TOTAL ' + escapeHtml(proyecto).toUpperCase() + '</td>';
-        
-        var totalProyectoCompleto = 0;
-        for (var m = 0; m < meses.length; m++) {
-          var mes = meses[m];
-          var totalMesProyecto = 0;
-          
-          nombresEmpleados.forEach(function(nombreEmpleado) {
-            totalMesProyecto += empleadosDelProyecto[nombreEmpleado].meses[mes] || 0;
-          });
-          
-          totalProyectoCompleto += totalMesProyecto;
-          html += '<td class="num" style="color:var(--primary);font-size:10px;">' + moneyCompact(totalMesProyecto) + '</td>';
-        }
-        
-        html += '<td class="num" style="font-size:12px;color:var(--primary);">' + moneyCompact(totalProyectoCompleto) + '</td>';
-        html += '</tr>';
-        
-        html += '</tbody></table></div></div>';
-      });
-      
-      html += '</div>';
-      
       container.innerHTML = html;
     }
     
