@@ -1,7 +1,8 @@
 /***** CONFIGURACIÓN *****/
 function getAppSheetConfig_() {
   const p = PropertiesService.getScriptProperties();
-  const host = p.getProperty("APPSHEET_HOST") || "https://api.appsheet.com";
+  const hostRaw = p.getProperty("APPSHEET_HOST") || "https://api.appsheet.com";
+  const host = hostRaw.startsWith("http") ? hostRaw : `https://${hostRaw}`;
   const appId = p.getProperty("APPSHEET_APP_ID");
   const key = p.getProperty("APPSHEET_ACCESS_KEY");
 
@@ -99,8 +100,7 @@ function include(filename) {
 /***** APPSHEET API *****/
 function appsheetPost_(tableName, action, rows = [], properties = {}) {
   const { host, appId, key } = getAppSheetConfig_();
-  const baseHost = host.startsWith('http') ? host : `https://${host}`;
-  const url = `${baseHost}/api/v2/apps/${appId}/tables/${encodeURIComponent(tableName)}/Action`;
+  const url = `${host}/api/v2/apps/${appId}/tables/${encodeURIComponent(tableName)}/Action`;
   
   const payload = { Action: action, Properties: properties, Rows: rows };
   const options = {
@@ -219,6 +219,7 @@ function invalidateGlobalCache_() {
   try {
     const c = CacheService.getScriptCache();
     c.remove("MENSUALIZADOS_GLOBAL_V2");
+    c.remove("DASHBOARD_GLOBAL_V1");
   } catch (e) {}
 }
 
@@ -497,6 +498,10 @@ function getLoggedUser() {
 /***** DASHBOARD GLOBAL *****/
 function getDashboardGlobal() {
   try {
+    const cacheKey = "DASHBOARD_GLOBAL_V1";
+    const cached = cacheGetJSON_(cacheKey);
+    if (cached) return cached;
+
     const { TABLES, COLS } = CONFIG;
     
     // 1. Obtener catálogo de proyectos para mapear nombres
@@ -604,7 +609,7 @@ function getDashboardGlobal() {
     
     const proyectos = Array.from(proyectosSet).sort();
     
-    return {
+    const payload = {
       ok: true,
       data: {
         proyectosPorMes: proyectosPorMes,
@@ -617,6 +622,8 @@ function getDashboardGlobal() {
         }
       }
     };
+    cachePutJSON_(cacheKey, payload, 300);
+    return payload;
     
   } catch (e) {
     Logger.log("Error getDashboardGlobal: " + e.toString());
@@ -790,6 +797,3 @@ function getResumenMesGlobal(anioMes) {
     return { ok: false, message: "Error en getResumenMesGlobal: " + e.toString() };
   }
 }
-
-
-

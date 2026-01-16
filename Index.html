@@ -8,6 +8,7 @@
   <script>
     // ==================== VARIABLES GLOBALES ====================
     var CATS = { proyectos: [], fuentes: [], componentes: [], subcomponentes: [], categorias: [], responsables: [] };
+    var CATS_MAP = { proyectos: {}, fuentes: {}, componentes: {}, subcomponentes: {}, categorias: {}, responsables: {} };
     var TRAMO_EDITANDO = null;
     var EMPLEADO_ACTUAL = null;
     var ID_A_BORRAR = null;
@@ -64,8 +65,8 @@
     function clearTables() {
       var t1 = document.querySelector("#tblTramos tbody");
       var t2 = document.querySelector("#tblMeses tbody");
-      if (t1) t1.innerHTML = "";
-      if (t2) t2.innerHTML = "";
+      if (t1) t1.replaceChildren();
+      if (t2) t2.replaceChildren();
     }
     
     function showSections(show) {
@@ -122,9 +123,54 @@
     
     function getName(listName, id) {
       if (!id) return "—";
-      var list = CATS[listName] || [];
-      var item = list.find(function(x) { return x.id == id; });
-      return item ? item.nombre : id;
+      var map = CATS_MAP[listName] || {};
+      var key = String(id);
+      return map[key] || id;
+    }
+
+    function buildCatMap(list) {
+      var map = {};
+      (list || []).forEach(function(item) {
+        if (item && item.id != null) {
+          map[String(item.id)] = String(item.nombre || "");
+        }
+      });
+      return map;
+    }
+
+    function hydrateCatalogs(data) {
+      CATS = data || CATS;
+      CATS_MAP = {
+        proyectos: buildCatMap(CATS.proyectos),
+        fuentes: buildCatMap(CATS.fuentes),
+        componentes: buildCatMap(CATS.componentes),
+        subcomponentes: buildCatMap(CATS.subcomponentes),
+        categorias: buildCatMap(CATS.categorias),
+        responsables: buildCatMap(CATS.responsables)
+      };
+    }
+
+    function getCatalogCache_() {
+      try {
+        var raw = localStorage.getItem("cats_financiacion_v1");
+        if (!raw) return null;
+        var payload = JSON.parse(raw);
+        if (!payload || !payload.data || !payload.ts) return null;
+        var ageMs = Date.now() - payload.ts;
+        if (ageMs > 24 * 60 * 60 * 1000) return null;
+        return payload.data;
+      } catch (e) {
+        return null;
+      }
+    }
+
+    function setCatalogCache_(data) {
+      try {
+        localStorage.setItem("cats_financiacion_v1", JSON.stringify({
+          ts: Date.now(),
+          data: data || {}
+        }));
+      } catch (e) {}
     }
     
     // ==================== CATÁLOGOS ====================
@@ -132,16 +178,26 @@
       return new Promise(function(resolve, reject) {
         if (CATALOGOS_CARGADOS) {
           resolve(true);
-        } else {
-          google.script.run
-            .withSuccessHandler(function(data) {
-              CATS = data || CATS;
-              CATALOGOS_CARGADOS = true;
-              resolve(data);
-            })
-            .withFailureHandler(reject)
-            .getCatalogosFinanciacion();
+          return;
         }
+
+        var cached = getCatalogCache_();
+        if (cached) {
+          hydrateCatalogs(cached);
+          CATALOGOS_CARGADOS = true;
+          resolve(cached);
+          return;
+        }
+
+        google.script.run
+          .withSuccessHandler(function(data) {
+            hydrateCatalogs(data);
+            setCatalogCache_(data);
+            CATALOGOS_CARGADOS = true;
+            resolve(data);
+          })
+          .withFailureHandler(reject)
+          .getCatalogosFinanciacion();
       });
     }
     
@@ -294,16 +350,17 @@
     function renderTramos(tramos) {
       var tbody = document.querySelector("#tblTramos tbody");
       if (!tbody) return;
-      tbody.innerHTML = "";
+      tbody.replaceChildren();
       
       if (!tramos || tramos.length === 0) {
         tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">No hay tramos registrados</td></tr>';
         return;
       }
-      
+
+      var frag = document.createDocumentFragment();
       tramos.forEach(function(t) {
         var tr = document.createElement("tr");
-        tr.innerHTML = 
+        tr.innerHTML =
           '<td>' + escapeHtml(t.id) + '</td>' +
           '<td>' + formatDate(t.fechaInicio) + '</td>' +
           '<td>' + formatDate(t.fechaFin) + '</td>' +
@@ -317,28 +374,31 @@
             '<button class="btn-circle edit" onclick="editarTramo(\'' + t.id + '\')">✏️</button>' +
             '<button class="btn-circle delete" onclick="confirmarEliminar(\'' + t.id + '\')">🗑️</button>' +
           '</td>';
-        tbody.appendChild(tr);
+        frag.appendChild(tr);
       });
+      tbody.appendChild(frag);
     }
     
     function renderMensual(meses) {
       var tbody = document.querySelector("#tblMeses tbody");
       if (!tbody) return;
-      tbody.innerHTML = "";
+      tbody.replaceChildren();
       
       if (!meses || meses.length === 0) {
         tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);">No hay datos mensualizados</td></tr>';
         return;
       }
-      
+
+      var frag = document.createDocumentFragment();
       meses.forEach(function(m) {
         var tr = document.createElement("tr");
-        tr.innerHTML = 
+        tr.innerHTML =
           '<td>' + formatMes(m.anioMes) + '</td>' +
           '<td class="num">' + money(m.total) + '</td>' +
           '<td><button class="btnSecondary" style="width:auto;padding:8px 16px;" onclick="verDetalleMes(\'' + m.anioMes + '\')">Ver Detalle</button></td>';
-        tbody.appendChild(tr);
+        frag.appendChild(tr);
       });
+      tbody.appendChild(frag);
     }
     
     function renderResumen(datos) {
