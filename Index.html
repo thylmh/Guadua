@@ -1,0 +1,1711 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <title>Guadua - Planeación de Nómina</title>
+  <?!= include('Css'); ?>
+  
+  <script>
+    // ==================== VARIABLES GLOBALES ====================
+    var CATS = { proyectos: [], fuentes: [], componentes: [], subcomponentes: [], categorias: [], responsables: [] };
+    var TRAMO_EDITANDO = null;
+    var EMPLEADO_ACTUAL = null;
+    var ID_A_BORRAR = null;
+    var CATALOGOS_CARGADOS = false;
+    var DATOS_ACTUAL = null;
+    var MENSUALIZADO_GLOBAL_CACHE = null;
+    
+    // ==================== NAVEGACIÓN ====================
+    function irAConsultaEmpleado() {
+      document.getElementById("paginaInicio").style.display = "none";
+      document.getElementById("seccionConsulta").style.display = "block";
+      document.getElementById("vistaIndividual").style.display = "none";
+      document.getElementById("vistaGlobal").style.display = "none";
+      setTimeout(function() { document.getElementById("cedula").focus(); }, 100);
+    }
+    
+    function irADashboardGlobal() {
+      document.getElementById("paginaInicio").style.display = "none";
+      document.getElementById("seccionConsulta").style.display = "none";
+      document.getElementById("vistaGlobal").style.display = "block";
+      document.getElementById("vistaIndividual").style.display = "none";
+    }
+    
+
+
+  function volverAlInicio() {
+    document.getElementById("paginaInicio").style.display = "block";
+    document.getElementById("seccionConsulta").style.display = "none";
+    document.getElementById("vistaGlobal").style.display = "none";
+    document.getElementById("vistaIndividual").style.display = "none";
+    document.getElementById("vistaMensualizadaGlobal").style.display = "none"; // <-- FALTABA
+    var tn = document.getElementById("tabNavigation");
+    if (tn) tn.style.display = "none";
+    document.getElementById("cedula").value = "";
+    var vd = document.getElementById("vistaDetallada");
+    if (vd) vd.style.display = "block";
+}
+
+    
+    // ==================== HELPERS ====================
+    function setMsg(text, kind) { 
+      var el = document.getElementById("msg"); 
+      el.textContent = text || ""; 
+      el.className = "msg " + (kind || ""); 
+    }
+    
+    function setMsgContrato(text, kind) { 
+      var el = document.getElementById("msgContrato"); 
+      if (!el) return; 
+      el.textContent = text || ""; 
+      el.className = "msg " + (kind || ""); 
+    }
+    
+    function clearTables() {
+      var t1 = document.querySelector("#tblTramos tbody");
+      var t2 = document.querySelector("#tblMeses tbody");
+      if (t1) t1.innerHTML = "";
+      if (t2) t2.innerHTML = "";
+    }
+    
+    function showSections(show) {
+      document.getElementById("tabNavigation").style.display = show ? "" : "none";
+      document.getElementById("secEmpleado").style.display = show ? "" : "none";
+      document.getElementById("secTramos").style.display = show ? "" : "none";
+      document.getElementById("secMensual").style.display = show ? "" : "none";
+      document.getElementById("secResumen").style.display = show ? "" : "none";
+    }
+    
+    function escapeHtml(s) {
+      return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+    
+    function money(n) {
+      if (n == null || n === "") return "—";
+      var x = Number(n);
+      return isNaN(x) ? String(n) : x.toLocaleString("es-CO", {style:'currency',currency:'COP',maximumFractionDigits:0});
+    }
+    
+    function moneyCompact(n) {
+      if (n == null || n === "") return "—";
+      var x = Number(n);
+      if (isNaN(x)) return String(n);
+      
+      if (x >= 1000000) {
+        return "$" + (x / 1000000).toFixed(1) + "M";
+      }
+      return x.toLocaleString("es-CO", {style:'currency',currency:'COP',maximumFractionDigits:0});
+    }
+    
+    function formatDate(value) {
+      if (!value) return "—";
+      var s = String(value).trim();
+      var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (m) {
+        var dt = new Date(Date.UTC(Number(m[3]), Number(m[1]) - 1, Number(m[2])));
+        var day = String(dt.getUTCDate()).padStart(2,'0');
+        var month = String(dt.getUTCMonth()+1).padStart(2,'0');
+        return day + "/" + month + "/" + dt.getUTCFullYear();
+      }
+      return s;
+    }
+    
+    function formatMes(value) {
+      if (!value) return "—";
+      var s = String(value).trim();
+      var m = s.match(/^(\d{4})-(\d{2})/);
+      if (!m) return s;
+      var dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1));
+      var mes = new Intl.DateTimeFormat("es-CO", {month:"long",timeZone:"UTC"}).format(dt);
+      return m[1] + " " + mes.charAt(0).toUpperCase() + mes.slice(1);
+    }
+    
+    function getName(listName, id) {
+      if (!id) return "—";
+      var list = CATS[listName] || [];
+      var item = list.find(function(x) { return x.id == id; });
+      return item ? item.nombre : id;
+    }
+    
+    // ==================== CATÁLOGOS ====================
+    function asegurarCatalogos() {
+      return new Promise(function(resolve, reject) {
+        if (CATALOGOS_CARGADOS) {
+          resolve(true);
+        } else {
+          google.script.run
+            .withSuccessHandler(function(data) {
+              CATS = data || CATS;
+              CATALOGOS_CARGADOS = true;
+              resolve(data);
+            })
+            .withFailureHandler(reject)
+            .getCatalogosFinanciacion();
+        }
+      });
+    }
+    
+    // ==================== BÚSQUEDA DE EMPLEADO ====================
+    function buscar() {
+      console.log("🔍 Buscar llamado");
+      setMsg(""); setMsgContrato(""); clearTables(); showSections(false);
+      var cedula = document.getElementById("cedula").value.trim();
+      if (!cedula) { setMsg("Ingresa una cédula.", "warn"); return; }
+      
+      var btn = document.getElementById("btnBuscar");
+      btn.disabled = true;
+      btn.textContent = "Consultando...";
+      
+      asegurarCatalogos().then(function() {
+        google.script.run
+          .withSuccessHandler(function(res) {
+            btn.disabled = false;
+            btn.textContent = "🔍 Buscar";
+            if (!res || !res.ok) { setMsg(res?.message || "Error", "warn"); return; }
+            
+            DATOS_ACTUAL = res;
+            document.getElementById("tabNavigation").style.display = "block";
+            showSections(true);
+            
+            renderEmpleadoSimple(res.empleado, res.cabecera);
+            renderTramos(res.tramos);
+            renderMensual(res.months);
+            renderResumen(res);
+            
+            setMsg("✅ Datos cargados: " + res.tramos.length + " tramo(s)", "ok");
+            console.log("✅ Búsqueda exitosa");
+          })
+          .withFailureHandler(function(err) {
+            btn.disabled = false;
+            btn.textContent = "🔍 Buscar";
+            setMsg("Error: " + err, "err");
+          })
+          .getVistaFinanciacion({cedula: cedula});
+      }).catch(function(e) {
+        btn.disabled = false;
+        btn.textContent = "🔍 Buscar";
+        setMsg("Error cargando catálogos", "err");
+      });
+    }
+    
+    function renderEmpleadoSimple(emp, con) {
+      var box = document.getElementById("kpiBox");
+      if (!box) return;
+      
+      box.innerHTML = "";
+      if (!emp) return;
+      
+      if (!con) {
+        setMsgContrato("No hay contrato activo.", "warn");
+        return;
+      }
+      
+      // 🎨 NOMBRE COMO BANNER DESTACADO
+      var html = '<div style="background:linear-gradient(135deg,rgba(0,77,103,0.08) 0%,rgba(0,168,150,0.08) 100%);border-left:4px solid var(--primary);border-radius:12px;padding:20px 24px;margin-bottom:36px;backdrop-filter:blur(10px);box-shadow:0 4px 12px rgba(0,77,103,0.08);">';
+      html += '<div style="font-size:13px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Trabajador</div>';
+      html += '<div style="font-size:26px;font-weight:600;color:var(--primary-dark);letter-spacing:-0.4px;">' + escapeHtml(emp.nombre || "Sin nombre") + '</div>';
+      html += '</div>';
+      
+      // 📍 SECCIÓN: CENTRO DE COSTOS
+      html += '<div style="margin-bottom:32px;">';
+      html += '<div style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:16px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--border);padding-bottom:8px;">📍 Centro de Costos</div>';
+      html += '<div class="claude-grid">';
+      
+      var camposCentro = [
+        {label:"DIRECCIÓN", valor:con.DIRECCION}
+      ];
+      if (con.GERENCIA) camposCentro.push({label:"GERENCIA", valor:con.GERENCIA});
+      if (con.AREA) camposCentro.push({label:"ÁREA", valor:con.AREA});
+      if (con.SUBAREA) camposCentro.push({label:"SUBÁREA", valor:con.SUBAREA});
+      
+      camposCentro.forEach(function(c) {
+        html += '<div class="claude-card">';
+        html += '<div class="claude-label">' + c.label + '</div>';
+        html += '<div class="claude-value">' + escapeHtml(c.valor || "---") + '</div>';
+        html += '</div>';
+      });
+      html += '</div></div>';
+      
+      // 📄 SECCIÓN: INFORMACIÓN DEL CONTRATO
+      html += '<div style="margin-bottom:32px;">';
+      html += '<div style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:16px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--border);padding-bottom:8px;">📄 Información del Contrato</div>';
+      html += '<div class="claude-grid">';
+      
+      var camposContrato = [
+        {label:"ID CONTRATO", valor:con.IDCONTRATO},
+        {label:"POSICIÓN", valor:con.POSICION},
+        {label:"PLANTA", valor:con.PLANTA},
+        {label:"TIPO DE PLANTA", valor:con.TPLANTA},
+        {label:"CARGO", valor:con.CARGO},
+        {label:"ROL", valor:con.ROL},
+        {label:"BANDA", valor:con.BANDA},
+        {label:"N° CONTRATO", valor:con.NUM_CONTRATO},
+        {label:"F. CONTRATO", valor:con.F_CONTRATO, tipo:"fecha"},
+        {label:"F. TERMINACIÓN", valor:con.F_TERMINACION, tipo:"fecha"},
+        {label:"PRÓRROGAS", valor:con.PRORROGAS}
+      ];
+      
+      camposContrato.forEach(function(c) {
+        var display = c.valor || "---";
+        if (c.valor && c.tipo === "fecha") {
+          display = formatDate(c.valor);
+        }
+        html += '<div class="claude-card">';
+        html += '<div class="claude-label">' + c.label + '</div>';
+        html += '<div class="claude-value">' + escapeHtml(display) + '</div>';
+        html += '</div>';
+      });
+      html += '</div></div>';
+      
+      // 💰 SECCIÓN: CARGA SALARIAL
+      html += '<div style="margin-bottom:32px;">';
+      html += '<div style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:16px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--border);padding-bottom:8px;">💰 Carga Salarial</div>';
+      html += '<div class="claude-grid">';
+      
+      var camposSalarial = [
+        {label:"SALARIO", valor:con.SALARIO, tipo:"moneda"},
+        {label:"NIVEL RIESGO", valor:con.NIVEL_RIESGO},
+        {label:"ATEP", valor:con.ATEP, tipo:"porcentaje"}
+      ];
+      
+      camposSalarial.forEach(function(c) {
+        var display = c.valor || "---";
+        if (c.valor) {
+          if (c.tipo === "moneda") {
+            display = money(c.valor);
+          } else if (c.tipo === "porcentaje") {
+            if (!String(c.valor).includes("%") && !isNaN(c.valor)) {
+              display = (parseFloat(c.valor) * 100).toFixed(2) + "%";
+            } else {
+              display = String(c.valor);
+            }
+          }
+        }
+        html += '<div class="claude-card">';
+        html += '<div class="claude-label">' + c.label + '</div>';
+        html += '<div class="claude-value">' + display + '</div>';
+        html += '</div>';
+      });
+      html += '</div></div>';
+      
+      box.innerHTML = html;
+    }
+    
+    function renderTramos(tramos) {
+      var tbody = document.querySelector("#tblTramos tbody");
+      if (!tbody) return;
+      tbody.innerHTML = "";
+      
+      if (!tramos || tramos.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">No hay tramos registrados</td></tr>';
+        return;
+      }
+      
+      tramos.forEach(function(t) {
+        var tr = document.createElement("tr");
+        tr.innerHTML = 
+          '<td>' + escapeHtml(t.id) + '</td>' +
+          '<td>' + formatDate(t.fechaInicio) + '</td>' +
+          '<td>' + formatDate(t.fechaFin) + '</td>' +
+          '<td class="num">' + money(t.salarioEditable) + '</td>' +
+          '<td>' + escapeHtml(getName('proyectos', t.proyecto)) + '</td>' +
+          '<td>' + escapeHtml(t.rubro) + '</td>' +
+          '<td>' + escapeHtml(getName('fuentes', t.fuente)) + '</td>' +
+          '<td>' + escapeHtml(getName('componentes', t.componente)) + '</td>' +
+          '<td>' + escapeHtml(getName('responsables', t.responsable)) + '</td>' +
+          '<td style="text-align:center;">' +
+            '<button class="btn-circle edit" onclick="editarTramo(\'' + t.id + '\')">✏️</button>' +
+            '<button class="btn-circle delete" onclick="confirmarEliminar(\'' + t.id + '\')">🗑️</button>' +
+          '</td>';
+        tbody.appendChild(tr);
+      });
+    }
+    
+    function renderMensual(meses) {
+      var tbody = document.querySelector("#tblMeses tbody");
+      if (!tbody) return;
+      tbody.innerHTML = "";
+      
+      if (!meses || meses.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);">No hay datos mensualizados</td></tr>';
+        return;
+      }
+      
+      meses.forEach(function(m) {
+        var tr = document.createElement("tr");
+        tr.innerHTML = 
+          '<td>' + formatMes(m.anioMes) + '</td>' +
+          '<td class="num">' + money(m.total) + '</td>' +
+          '<td><button class="btnSecondary" style="width:auto;padding:8px 16px;" onclick="verDetalleMes(\'' + m.anioMes + '\')">Ver Detalle</button></td>';
+        tbody.appendChild(tr);
+      });
+    }
+    
+    function renderResumen(datos) {
+      var box = document.getElementById("resumenBox");
+      if (!box) return;
+      
+      if (!datos || !datos.months || datos.months.length === 0) {
+        box.innerHTML = '<div class="msg warn">No hay datos para mostrar resumen</div>';
+        return;
+      }
+      
+      // Agrupar por proyecto
+      var proyectos = {};
+      var totalGeneral = 0;
+      
+      datos.months.forEach(function(mes) {
+        mes.detalle.forEach(function(d) {
+          var proyId = d.proyecto;
+          var proyNombre = getName('proyectos', proyId);
+          
+          if (!proyectos[proyId]) {
+            proyectos[proyId] = {
+              id: proyId,
+              nombre: proyNombre,
+              totalCalculado: 0,
+              meses: new Set(),
+              fuentes: new Set(),
+              componentes: new Set(),
+              responsables: new Set()
+            };
+          }
+          
+          proyectos[proyId].totalCalculado += (d.valor || 0);
+          proyectos[proyId].meses.add(mes.anioMes);
+          if (d.fuente) proyectos[proyId].fuentes.add(d.fuente);
+          if (d.componente) proyectos[proyId].componentes.add(d.componente);
+          if (d.responsable) proyectos[proyId].responsables.add(d.responsable);
+          
+          totalGeneral += (d.valor || 0);
+        });
+      });
+      
+      // Convertir a array y ordenar
+      var proyectosArray = Object.values(proyectos).sort(function(a, b) {
+        return b.totalCalculado - a.totalCalculado;
+      });
+      
+      // Generar HTML
+      var html = '<div style="margin-bottom:24px;padding:16px;background:rgba(0,77,103,0.05);border-radius:12px;border-left:4px solid var(--primary);">';
+      html += '<div style="font-size:13px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px;">Total General Mensualizado</div>';
+      html += '<div style="font-size:32px;font-weight:700;color:var(--primary);">' + money(totalGeneral) + '</div>';
+      html += '</div>';
+      
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;">';
+      
+      proyectosArray.forEach(function(proyecto) {
+        var porcentaje = totalGeneral > 0 ? ((proyecto.totalCalculado / totalGeneral) * 100).toFixed(1) : 0;
+        
+        html += '<div class="resumen-card">';
+        html += '<div class="resumen-header">';
+        html += '<div class="resumen-proyecto-nombre">' + escapeHtml(proyecto.nombre) + '</div>';
+        html += '<div class="resumen-porcentaje">' + porcentaje + '%</div>';
+        html += '</div>';
+        
+        html += '<div class="resumen-total">' + money(proyecto.totalCalculado) + '</div>';
+        html += '<div class="resumen-subtotal">Total Mensualizado (Base 30)</div>';
+        
+        html += '<div class="resumen-detalles">';
+        html += '<div class="resumen-item">';
+        html += '<span class="resumen-label">📅 Meses:</span>';
+        html += '<span class="resumen-valor">' + proyecto.meses.size + '</span>';
+        html += '</div>';
+        html += '<div class="resumen-item">';
+        html += '<span class="resumen-label">💰 Fuentes:</span>';
+        html += '<span class="resumen-valor">' + proyecto.fuentes.size + '</span>';
+        html += '</div>';
+        html += '<div class="resumen-item">';
+        html += '<span class="resumen-label">📦 Componentes:</span>';
+        html += '<span class="resumen-valor">' + proyecto.componentes.size + '</span>';
+        html += '</div>';
+        html += '<div class="resumen-item">';
+        html += '<span class="resumen-label">👤 Responsables:</span>';
+        html += '<span class="resumen-valor">' + proyecto.responsables.size + '</span>';
+        html += '</div>';
+        html += '</div>';
+        
+        html += '<div class="resumen-barra">';
+        html += '<div class="resumen-barra-fill" style="width:' + porcentaje + '%"></div>';
+        html += '</div>';
+        html += '</div>';
+      });
+      
+      html += '</div>';
+      box.innerHTML = html;
+    }
+    
+    // ==================== DASHBOARD GLOBAL ====================
+    function cargarDashboardGlobal() {
+      console.log("🌍 Cargar Dashboard Global");
+      var container = document.getElementById("dashGlobalContent");
+      var msgDiv = document.getElementById("msgGlobal");
+      var btnCargar = event.target;
+      
+      msgDiv.innerHTML = "⏳ Cargando datos de toda la organización...";
+      msgDiv.className = "msg";
+      msgDiv.style.display = "block";
+      btnCargar.disabled = true;
+      btnCargar.textContent = "Cargando...";
+      container.innerHTML = "";
+      
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btnCargar.disabled = false;
+          btnCargar.textContent = "🔄 Recargar Dashboard Global";
+          
+          if (res && res.ok) {
+            generarDashboardGlobal(res.data);
+            msgDiv.style.display = "none";
+          } else {
+            msgDiv.innerHTML = "❌ Error: " + (res?.message || "Sin datos");
+            msgDiv.className = "msg err";
+          }
+        })
+        .withFailureHandler(function(err) {
+          btnCargar.disabled = false;
+          btnCargar.textContent = "📊 Cargar Dashboard Global";
+          msgDiv.innerHTML = "❌ Error: " + err;
+          msgDiv.className = "msg err";
+        })
+        .getDashboardGlobal();
+    }
+    
+    function generarDashboardGlobal(data) {
+      var container = document.getElementById("dashGlobalContent");
+      
+      if (!data || !data.proyectosPorMes) {
+        container.innerHTML = "<div class='msg warn'>No hay datos disponibles</div>";
+        return;
+      }
+      
+      var proyectosPorMes = data.proyectosPorMes;
+      var proyectoEmpleadoMes = data.proyectoEmpleadoMes || {}; // NUEVA ESTRUCTURA
+      var totales = data.totales;
+      var proyectos = data.proyectos;
+      
+      // KPIs
+      var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-bottom:32px;">';
+      
+      html += '<div class="kpi-card"><div class="kpi-icon">💰</div><div class="kpi-label">Total Nómina</div>';
+      html += '<div class="kpi-value">' + money(totales.totalGeneral) + '</div>';
+      html += '<div class="kpi-desc">Inversión total mensualizada</div></div>';
+      
+      html += '<div class="kpi-card"><div class="kpi-icon">👥</div><div class="kpi-label">Empleados</div>';
+      html += '<div class="kpi-value">' + totales.cantidadEmpleados + '</div>';
+      html += '<div class="kpi-desc">Personal activo</div></div>';
+      
+      html += '<div class="kpi-card"><div class="kpi-icon">🎯</div><div class="kpi-label">Proyectos</div>';
+      html += '<div class="kpi-value">' + proyectos.length + '</div>';
+      html += '<div class="kpi-desc">Proyectos únicos</div></div>';
+      
+      html += '<div class="kpi-card"><div class="kpi-icon">📅</div><div class="kpi-label">Período</div>';
+      html += '<div class="kpi-value">' + totales.meses + '</div>';
+      html += '<div class="kpi-desc">Meses analizados</div></div>';
+      
+      html += '</div>';
+      
+      // Tabla Consolidada Proyecto vs Mes
+      html += '<div style="margin-top:32px;margin-bottom:48px;">';
+      html += '<div style="font-size:16px;font-weight:600;color:var(--primary-dark);margin-bottom:16px;">📊 Consolidado por Proyecto vs Mes-Año</div>';
+      html += '<div class="tableWrap"><table class="tabla-compacta"><thead><tr>';
+      html += '<th style="position:sticky;left:0;background:#F8FAFB;z-index:10;min-width:200px;font-size:11px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">Proyecto</th>';
+      
+      // Obtener meses
+      var primerProyecto = proyectos[0];
+      var meses = Object.keys(proyectosPorMes[primerProyecto] || {}).sort();
+      
+      for (var i = 0; i < meses.length; i++) {
+        html += '<th style="min-width:110px;font-size:10px;">' + formatMes(meses[i]) + '</th>';
+      }
+      html += '<th style="min-width:130px;background:rgba(0,77,103,0.05);font-weight:700;font-size:11px;">Total</th>';
+      html += '</tr></thead><tbody>';
+      
+      // Filas por proyecto
+      for (var p = 0; p < proyectos.length; p++) {
+        var proyecto = proyectos[p];
+        var datosProyecto = proyectosPorMes[proyecto];
+        var totalProyecto = 0;
+        
+        html += '<tr>';
+        html += '<td style="position:sticky;left:0;background:#FFFFFF;font-weight:600;z-index:5;font-size:11px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">' + escapeHtml(proyecto) + '</td>';
+        
+        for (var m = 0; m < meses.length; m++) {
+          var mes = meses[m];
+          var valor = datosProyecto[mes] || 0;
+          totalProyecto += valor;
+          html += '<td class="num" style="font-size:11px;">' + moneyCompact(valor) + '</td>';
+        }
+        
+        html += '<td class="num" style="font-weight:700;background:rgba(0,77,103,0.05);color:var(--primary);font-size:12px;">' + moneyCompact(totalProyecto) + '</td>';
+        html += '</tr>';
+      }
+      
+      // Fila de totales
+      html += '<tr style="background:rgba(0,77,103,0.08);font-weight:700;">';
+      html += '<td style="position:sticky;left:0;background:rgba(0,77,103,0.12);z-index:5;font-size:11px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">TOTAL</td>';
+      
+      for (var m = 0; m < meses.length; m++) {
+        var mes = meses[m];
+        var totalMes = 0;
+        for (var p = 0; p < proyectos.length; p++) {
+          totalMes += proyectosPorMes[proyectos[p]][mes] || 0;
+        }
+        html += '<td class="num" style="color:var(--primary);font-size:11px;">' + moneyCompact(totalMes) + '</td>';
+      }
+      
+      html += '<td class="num" style="font-size:13px;color:var(--primary);">' + moneyCompact(totales.totalGeneral) + '</td>';
+      html += '</tr>';
+      
+      html += '</tbody></table></div></div>';
+      
+      // ==================== TABLA: TODOS LOS EMPLEADOS VS MES-AÑO CON FILTROS ====================
+      html += '<div style="margin-top:48px;margin-bottom:48px;">';
+      html += '<div style="font-size:18px;font-weight:700;color:var(--primary-dark);margin-bottom:20px;padding-bottom:12px;border-bottom:3px solid var(--primary);">👥 Todos los Empleados vs Mes-Año</div>';
+      
+      // Panel de Filtros
+      html += '<div style="background:rgba(255,255,255,0.7);border:1px solid rgba(0,77,103,0.12);border-radius:12px;padding:20px;margin-bottom:20px;">';
+      html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;">';
+      
+      // Construir listas únicas para filtros
+      var direccionesSet = new Set();
+      var gerenciasSet = new Set();
+      var prorrogasSet = new Set();
+      
+      proyectos.forEach(function(proyecto) {
+        var empleadosDelProyecto = proyectoEmpleadoMes[proyecto] || {};
+        Object.keys(empleadosDelProyecto).forEach(function(nombreEmpleado) {
+          var emp = empleadosDelProyecto[nombreEmpleado];
+          if (emp.direccion) direccionesSet.add(emp.direccion);
+          if (emp.gerencia) gerenciasSet.add(emp.gerencia);
+          if (emp.prorrogas !== undefined && emp.prorrogas !== null) prorrogasSet.add(emp.prorrogas);
+        });
+      });
+      
+      var direcciones = Array.from(direccionesSet).sort();
+      var gerencias = Array.from(gerenciasSet).sort();
+      var prorrogasUnicas = Array.from(prorrogasSet).sort(function(a, b) { return a - b; });
+      
+      // Filtro por Proyecto
+      html += '<div class="field">';
+      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">📁 Proyecto</label>';
+      html += '<select id="filtroProyectoEmpleados" onchange="aplicarFiltrosEmpleados()">';
+      html += '<option value="">Todos</option>';
+      proyectos.forEach(function(p) {
+        html += '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>';
+      });
+      html += '</select></div>';
+      
+      // Filtro por Dirección
+      html += '<div class="field">';
+      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">🏢 Dirección</label>';
+      html += '<select id="filtroDireccion" onchange="aplicarFiltrosEmpleados()">';
+      html += '<option value="">Todas</option>';
+      direcciones.forEach(function(d) {
+        html += '<option value="' + escapeHtml(d) + '">' + escapeHtml(d) + '</option>';
+      });
+      html += '</select></div>';
+      
+      // Filtro por Gerencia
+      html += '<div class="field">';
+      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">👔 Gerencia</label>';
+      html += '<select id="filtroGerencia" onchange="aplicarFiltrosEmpleados()">';
+      html += '<option value="">Todas</option>';
+      gerencias.forEach(function(g) {
+        html += '<option value="' + escapeHtml(g) + '">' + escapeHtml(g) + '</option>';
+      });
+      html += '</select></div>';
+      
+      // Filtro por Empleado
+      html += '<div class="field">';
+      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">🔍 Empleado</label>';
+      html += '<input type="text" id="filtroNombreEmpleado" placeholder="Buscar..." onkeyup="aplicarFiltrosEmpleados()" />';
+      html += '</div>';
+      
+      // Filtro Fecha Desde
+      html += '<div class="field">';
+      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">📅 Desde</label>';
+      html += '<input type="month" id="filtroFechaDesde" onchange="aplicarFiltrosEmpleados()" />';
+      html += '</div>';
+      
+      // Filtro Fecha Hasta
+      html += '<div class="field">';
+      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">📅 Hasta</label>';
+      html += '<input type="month" id="filtroFechaHasta" onchange="aplicarFiltrosEmpleados()" />';
+      html += '</div>';
+      
+      // Filtro F. Terminación Desde
+      html += '<div class="field">';
+      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">📆 F.Terminación Desde</label>';
+      html += '<input type="date" id="filtroTerminacionDesde" onchange="aplicarFiltrosEmpleados()" />';
+      html += '</div>';
+      
+      // Filtro F. Terminación Hasta
+      html += '<div class="field">';
+      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">📆 F.Terminación Hasta</label>';
+      html += '<input type="date" id="filtroTerminacionHasta" onchange="aplicarFiltrosEmpleados()" />';
+      html += '</div>';
+      
+      // Filtro por Prórrogas
+      html += '<div class="field">';
+      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">📝 Prórrogas</label>';
+      html += '<select id="filtroProrrogas" onchange="aplicarFiltrosEmpleados()">';
+      html += '<option value="">Todas</option>';
+      prorrogasUnicas.forEach(function(p) {
+        html += '<option value="' + p + '">' + p + '</option>';
+      });
+      html += '</select></div>';
+      
+      // Botón Limpiar Filtros
+      html += '<div class="field" style="display:flex;align-items:flex-end;">';
+      html += '<button onclick="limpiarFiltrosEmpleados()" class="btnSecondary" style="width:100%;padding:12px;font-size:13px;">🔄 Limpiar</button>';
+      html += '</div>';
+      
+      html += '</div></div>';
+      
+      // Construir estructura de TODOS los empleados
+      var todosLosEmpleados = {};
+      
+      proyectos.forEach(function(proyecto) {
+        var empleadosDelProyecto = proyectoEmpleadoMes[proyecto] || {};
+        Object.keys(empleadosDelProyecto).forEach(function(nombreEmpleado) {
+          if (!todosLosEmpleados[nombreEmpleado]) {
+            todosLosEmpleados[nombreEmpleado] = {
+              cedula: empleadosDelProyecto[nombreEmpleado].cedula,
+              direccion: empleadosDelProyecto[nombreEmpleado].direccion,
+              gerencia: empleadosDelProyecto[nombreEmpleado].gerencia,
+              fTerminacion: empleadosDelProyecto[nombreEmpleado].fTerminacion,
+              prorrogas: empleadosDelProyecto[nombreEmpleado].prorrogas,
+              proyectos: [],
+              meses: {}
+            };
+          }
+          todosLosEmpleados[nombreEmpleado].proyectos.push(proyecto);
+          
+          // Sumar valores por mes
+          var mesesEmpleado = empleadosDelProyecto[nombreEmpleado].meses;
+          Object.keys(mesesEmpleado).forEach(function(mes) {
+            if (!todosLosEmpleados[nombreEmpleado].meses[mes]) {
+              todosLosEmpleados[nombreEmpleado].meses[mes] = 0;
+            }
+            todosLosEmpleados[nombreEmpleado].meses[mes] += mesesEmpleado[mes];
+          });
+        });
+      });
+      
+      var nombresEmpleadosTodos = Object.keys(todosLosEmpleados).sort();
+      
+      // Contador de resultados
+      html += '<div id="contadorResultados" style="margin-bottom:12px;font-size:13px;color:var(--text-muted);font-weight:500;">Mostrando ' + nombresEmpleadosTodos.length + ' empleado(s)</div>';
+      
+      // Tabla
+      html += '<div class="tableWrap" id="tablaEmpleadosGlobal">';
+      html += '<table class="tabla-compacta"><thead><tr>';
+      html += '<th style="position:sticky;left:0;background:#F8FAFB;z-index:10;min-width:180px;font-size:10px;">Empleado</th>';
+      html += '<th style="min-width:130px;font-size:9px;">Dirección</th>';
+      html += '<th style="min-width:130px;font-size:9px;">Gerencia</th>';
+      html += '<th style="min-width:110px;font-size:9px;">F. Terminación</th>';
+      html += '<th style="min-width:90px;font-size:9px;">Prórrogas</th>';
+      html += '<th style="min-width:200px;font-size:9px;">Proyecto(s)</th>';
+      
+      // Columnas de meses
+      for (var i = 0; i < meses.length; i++) {
+        html += '<th class="col-mes" data-mes="' + meses[i] + '" style="min-width:95px;font-size:9px;">' + formatMes(meses[i]) + '</th>';
+      }
+      html += '<th style="min-width:110px;background:rgba(0,77,103,0.05);font-weight:700;font-size:10px;">Total</th>';
+      html += '</tr></thead><tbody id="tbodyEmpleadosGlobal">';
+      
+      // Filas por empleado
+      nombresEmpleadosTodos.forEach(function(nombreEmpleado) {
+        var datosEmpleado = todosLosEmpleados[nombreEmpleado];
+        var totalEmpleado = 0;
+        var proyectosStr = datosEmpleado.proyectos.join(', ');
+        var fTermStr = datosEmpleado.fTerminacion ? formatDate(datosEmpleado.fTerminacion) : "—";
+        
+        html += '<tr class="fila-empleado" ';
+        html += 'data-empleado="' + escapeHtml(nombreEmpleado).toLowerCase() + '" ';
+        html += 'data-proyectos="' + escapeHtml(proyectosStr).toLowerCase() + '" ';
+        html += 'data-direccion="' + escapeHtml(datosEmpleado.direccion).toLowerCase() + '" ';
+        html += 'data-gerencia="' + escapeHtml(datosEmpleado.gerencia).toLowerCase() + '" ';
+        html += 'data-fterminacion="' + (datosEmpleado.fTerminacion || "") + '" ';
+        html += 'data-prorrogas="' + (datosEmpleado.prorrogas || 0) + '">';
+        
+        html += '<td style="position:sticky;left:0;background:#FFFFFF;font-weight:600;z-index:5;font-size:10px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">' + escapeHtml(nombreEmpleado) + '</td>';
+        html += '<td style="font-size:9px;color:var(--text-muted);">' + escapeHtml(datosEmpleado.direccion) + '</td>';
+        html += '<td style="font-size:9px;color:var(--text-muted);">' + escapeHtml(datosEmpleado.gerencia) + '</td>';
+        html += '<td style="font-size:9px;color:var(--text-muted);">' + fTermStr + '</td>';
+        html += '<td style="font-size:9px;text-align:center;font-weight:600;color:var(--primary);">' + (datosEmpleado.prorrogas || 0) + '</td>';
+        html += '<td style="font-size:9px;color:var(--text);">' + escapeHtml(proyectosStr) + '</td>';
+        
+        for (var m = 0; m < meses.length; m++) {
+          var mes = meses[m];
+          var valor = datosEmpleado.meses[mes] || 0;
+          totalEmpleado += valor;
+          
+          if (valor > 0) {
+            html += '<td class="num celda-mes" data-mes="' + mes + '" style="font-size:9px;background:rgba(0,168,150,0.05);">' + moneyCompact(valor) + '</td>';
+          } else {
+            html += '<td class="num celda-mes" data-mes="' + mes + '" style="font-size:9px;color:var(--text-muted);">—</td>';
+          }
+        }
+        
+        html += '<td class="num" style="font-weight:700;background:rgba(0,77,103,0.08);color:var(--primary);font-size:10px;">' + moneyCompact(totalEmpleado) + '</td>';
+        html += '</tr>';
+      });
+      
+      // Fila de totales
+      html += '<tr style="background:rgba(0,77,103,0.12);font-weight:700;" id="filaTotal">';
+      html += '<td colspan="6" style="position:sticky;left:0;background:rgba(0,77,103,0.12);z-index:5;font-size:10px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">TOTAL</td>';
+      
+      var granTotal = 0;
+      for (var m = 0; m < meses.length; m++) {
+        var mes = meses[m];
+        var totalMes = 0;
+        
+        nombresEmpleadosTodos.forEach(function(nombreEmpleado) {
+          totalMes += todosLosEmpleados[nombreEmpleado].meses[mes] || 0;
+        });
+        
+        granTotal += totalMes;
+        html += '<td class="num col-total-mes" data-mes="' + mes + '" style="color:var(--primary);font-size:9px;">' + moneyCompact(totalMes) + '</td>';
+      }
+      
+      html += '<td class="num" id="granTotalGeneral" style="font-size:11px;color:var(--primary);">' + moneyCompact(granTotal) + '</td>';
+      html += '</tr>';
+      
+      html += '</tbody></table></div></div>';
+      
+      // ==================== TABLAS DETALLADAS POR PROYECTO ====================
+      html += '<div style="margin-top:48px;">';
+      html += '<div style="font-size:18px;font-weight:700;color:var(--primary-dark);margin-bottom:24px;padding-bottom:12px;border-bottom:3px solid var(--primary);">👥 Detalle por Proyecto: Empleado vs Mes-Año</div>';
+      
+      // Generar una tabla para cada proyecto
+      proyectos.forEach(function(proyecto) {
+        var empleadosDelProyecto = proyectoEmpleadoMes[proyecto] || {};
+        var nombresEmpleados = Object.keys(empleadosDelProyecto).sort();
+        
+        if (nombresEmpleados.length === 0) return; // Si no hay empleados, saltar
+        
+        html += '<div style="margin-bottom:40px;background:rgba(255,255,255,0.5);border-radius:16px;padding:24px;border:1px solid rgba(0,77,103,0.12);">';
+        html += '<div style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:16px;display:flex;align-items:center;gap:8px;">';
+        html += '<span style="font-size:20px;">🎯</span>';
+        html += '<span>' + escapeHtml(proyecto) + '</span>';
+        html += '<span style="margin-left:auto;font-size:13px;color:var(--text-muted);font-weight:500;">' + nombresEmpleados.length + ' empleado(s)</span>';
+        html += '</div>';
+        
+        html += '<div class="tableWrap"><table class="tabla-compacta"><thead><tr>';
+        html += '<th style="position:sticky;left:0;background:#F8FAFB;z-index:10;min-width:200px;font-size:10px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">Empleado</th>';
+        
+        // Columnas de meses
+        for (var i = 0; i < meses.length; i++) {
+          html += '<th style="min-width:100px;font-size:9px;">' + formatMes(meses[i]) + '</th>';
+        }
+        html += '<th style="min-width:120px;background:rgba(0,77,103,0.05);font-weight:700;font-size:10px;">Total</th>';
+        html += '</tr></thead><tbody>';
+        
+        // Filas por empleado
+        nombresEmpleados.forEach(function(nombreEmpleado) {
+          var datosEmpleado = empleadosDelProyecto[nombreEmpleado];
+          var totalEmpleado = 0;
+          
+          html += '<tr>';
+          html += '<td style="position:sticky;left:0;background:#FFFFFF;font-weight:500;z-index:5;font-size:10px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">' + escapeHtml(nombreEmpleado) + '</td>';
+          
+          for (var m = 0; m < meses.length; m++) {
+            var mes = meses[m];
+            var valor = datosEmpleado.meses[mes] || 0;
+            totalEmpleado += valor;
+            
+            if (valor > 0) {
+              html += '<td class="num" style="font-size:10px;background:rgba(0,168,150,0.05);">' + moneyCompact(valor) + '</td>';
+            } else {
+              html += '<td class="num" style="font-size:10px;color:var(--text-muted);">—</td>';
+            }
+          }
+          
+          html += '<td class="num" style="font-weight:700;background:rgba(0,77,103,0.08);color:var(--primary);font-size:11px;">' + moneyCompact(totalEmpleado) + '</td>';
+          html += '</tr>';
+        });
+        
+        // Fila de totales del proyecto
+        html += '<tr style="background:rgba(0,77,103,0.12);font-weight:700;">';
+        html += '<td style="position:sticky;left:0;background:rgba(0,77,103,0.15);z-index:5;font-size:10px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">TOTAL ' + escapeHtml(proyecto).toUpperCase() + '</td>';
+        
+        var totalProyectoCompleto = 0;
+        for (var m = 0; m < meses.length; m++) {
+          var mes = meses[m];
+          var totalMesProyecto = 0;
+          
+          nombresEmpleados.forEach(function(nombreEmpleado) {
+            totalMesProyecto += empleadosDelProyecto[nombreEmpleado].meses[mes] || 0;
+          });
+          
+          totalProyectoCompleto += totalMesProyecto;
+          html += '<td class="num" style="color:var(--primary);font-size:10px;">' + moneyCompact(totalMesProyecto) + '</td>';
+        }
+        
+        html += '<td class="num" style="font-size:12px;color:var(--primary);">' + moneyCompact(totalProyectoCompleto) + '</td>';
+        html += '</tr>';
+        
+        html += '</tbody></table></div></div>';
+      });
+      
+      html += '</div>';
+      
+      container.innerHTML = html;
+    }
+    
+    // ==================== FILTROS TABLA EMPLEADOS ====================
+    function aplicarFiltrosEmpleados() {
+      var filtroProyecto = (document.getElementById("filtroProyectoEmpleados")?.value || "").toLowerCase();
+      var filtroDireccion = (document.getElementById("filtroDireccion")?.value || "").toLowerCase();
+      var filtroGerencia = (document.getElementById("filtroGerencia")?.value || "").toLowerCase();
+      var filtroNombre = (document.getElementById("filtroNombreEmpleado")?.value || "").toLowerCase();
+      var filtroDesde = document.getElementById("filtroFechaDesde")?.value || "";
+      var filtroHasta = document.getElementById("filtroFechaHasta")?.value || "";
+      var filtroTermDesde = document.getElementById("filtroTerminacionDesde")?.value || "";
+      var filtroTermHasta = document.getElementById("filtroTerminacionHasta")?.value || "";
+      var filtroProrrogas = document.getElementById("filtroProrrogas")?.value || "";
+      
+      var filas = document.querySelectorAll(".fila-empleado");
+      var contador = 0;
+      
+      // Ocultar/mostrar columnas de meses según rango de fechas
+      var columnasMes = document.querySelectorAll(".col-mes");
+      var celdasMes = document.querySelectorAll(".celda-mes");
+      var totalesMes = document.querySelectorAll(".col-total-mes");
+      
+      columnasMes.forEach(function(col) {
+        var mes = col.getAttribute("data-mes");
+        var mostrar = true;
+        
+        if (filtroDesde && mes < filtroDesde) mostrar = false;
+        if (filtroHasta && mes > filtroHasta) mostrar = false;
+        
+        col.style.display = mostrar ? "" : "none";
+      });
+      
+      // Arrays para acumular totales
+      var totalesPorMes = {};
+      
+      filas.forEach(function(fila) {
+        var empleado = fila.getAttribute("data-empleado");
+        var proyectos = fila.getAttribute("data-proyectos");
+        var direccion = fila.getAttribute("data-direccion");
+        var gerencia = fila.getAttribute("data-gerencia");
+        var fterminacion = fila.getAttribute("data-fterminacion");
+        var prorrogas = fila.getAttribute("data-prorrogas");
+        
+        var mostrar = true;
+        
+        if (filtroProyecto && proyectos.indexOf(filtroProyecto) === -1) mostrar = false;
+        if (filtroDireccion && direccion !== filtroDireccion) mostrar = false;
+        if (filtroGerencia && gerencia !== filtroGerencia) mostrar = false;
+        if (filtroNombre && empleado.indexOf(filtroNombre) === -1) mostrar = false;
+        if (filtroProrrogas && prorrogas !== filtroProrrogas) mostrar = false;
+        
+        // Filtro por F. Terminación
+        if (filtroTermDesde && fterminacion && fterminacion < filtroTermDesde) mostrar = false;
+        if (filtroTermHasta && fterminacion && fterminacion > filtroTermHasta) mostrar = false;
+        
+        fila.style.display = mostrar ? "" : "none";
+        
+        if (mostrar) {
+          contador++;
+          
+          // Acumular totales por mes de filas visibles
+          var celdasMesFila = fila.querySelectorAll(".celda-mes");
+          celdasMesFila.forEach(function(celda) {
+            var mes = celda.getAttribute("data-mes");
+            var valorTexto = celda.textContent.trim();
+            
+            if (valorTexto !== "—") {
+              var valor = 0;
+              if (valorTexto.includes("M")) {
+                valor = parseFloat(valorTexto.replace("$", "").replace("M", "")) * 1000000;
+              } else {
+                valor = parseFloat(valorTexto.replace(/[$,]/g, "")) || 0;
+              }
+              
+              if (!totalesPorMes[mes]) totalesPorMes[mes] = 0;
+              totalesPorMes[mes] += valor;
+            }
+          });
+        }
+        
+        // Ocultar/mostrar celdas de mes según rango de fechas
+        var celdasMesFila = fila.querySelectorAll(".celda-mes");
+        celdasMesFila.forEach(function(celda) {
+          var mes = celda.getAttribute("data-mes");
+          var mostrarCelda = true;
+          
+          if (filtroDesde && mes < filtroDesde) mostrarCelda = false;
+          if (filtroHasta && mes > filtroHasta) mostrarCelda = false;
+          
+          celda.style.display = mostrarCelda ? "" : "none";
+        });
+      });
+      
+      // Actualizar totales por mes
+      totalesMes.forEach(function(col) {
+        var mes = col.getAttribute("data-mes");
+        var mostrar = true;
+        
+        if (filtroDesde && mes < filtroDesde) mostrar = false;
+        if (filtroHasta && mes > filtroHasta) mostrar = false;
+        
+        col.style.display = mostrar ? "" : "none";
+        
+        if (mostrar && totalesPorMes[mes]) {
+          col.textContent = moneyCompact(totalesPorMes[mes]);
+        }
+      });
+      
+      // Actualizar gran total
+      var granTotal = 0;
+      Object.values(totalesPorMes).forEach(function(val) {
+        granTotal += val;
+      });
+      
+      var granTotalEl = document.getElementById("granTotalGeneral");
+      if (granTotalEl) {
+        granTotalEl.textContent = moneyCompact(granTotal);
+      }
+      
+      // Actualizar contador
+      var contadorEl = document.getElementById("contadorResultados");
+      if (contadorEl) {
+        contadorEl.textContent = "Mostrando " + contador + " empleado(s)";
+      }
+    }
+    
+    function limpiarFiltrosEmpleados() {
+      var filtroProyecto = document.getElementById("filtroProyectoEmpleados");
+      var filtroDireccion = document.getElementById("filtroDireccion");
+      var filtroGerencia = document.getElementById("filtroGerencia");
+      var filtroNombre = document.getElementById("filtroNombreEmpleado");
+      var filtroDesde = document.getElementById("filtroFechaDesde");
+      var filtroHasta = document.getElementById("filtroFechaHasta");
+      var filtroTermDesde = document.getElementById("filtroTerminacionDesde");
+      var filtroTermHasta = document.getElementById("filtroTerminacionHasta");
+      var filtroProrrogas = document.getElementById("filtroProrrogas");
+      
+      if (filtroProyecto) filtroProyecto.value = "";
+      if (filtroDireccion) filtroDireccion.value = "";
+      if (filtroGerencia) filtroGerencia.value = "";
+      if (filtroNombre) filtroNombre.value = "";
+      if (filtroDesde) filtroDesde.value = "";
+      if (filtroHasta) filtroHasta.value = "";
+      if (filtroTermDesde) filtroTermDesde.value = "";
+      if (filtroTermHasta) filtroTermHasta.value = "";
+      if (filtroProrrogas) filtroProrrogas.value = "";
+      
+      aplicarFiltrosEmpleados();
+    }
+    
+    // ==================== TRAMOS: EDICIÓN Y ELIMINACIÓN ====================
+    function nuevoTramo() {
+      if (!DATOS_ACTUAL || !DATOS_ACTUAL.empleado) {
+        alert("Primero debes buscar un empleado");
+        return;
+      }
+      
+      TRAMO_EDITANDO = null;
+      document.getElementById("formId").value = "";
+      document.getElementById("formFechaInicio").value = "";
+      document.getElementById("formFechaFin").value = "";
+      document.getElementById("formSalario").value = "";
+      document.getElementById("formProyecto").value = "";
+      document.getElementById("formRubro").value = "";
+      document.getElementById("formFuente").value = "";
+      document.getElementById("formComponente").value = "";
+      document.getElementById("formSubcomponente").value = "";
+      document.getElementById("formCategoria").value = "";
+      document.getElementById("formResponsable").value = "";
+      
+      document.getElementById("modalTramo").style.display = "flex";
+      document.getElementById("tituloModal").textContent = "➕ Nuevo Tramo";
+    }
+    
+    function editarTramo(id) {
+      if (!DATOS_ACTUAL || !DATOS_ACTUAL.tramos) return;
+      
+      var tramo = DATOS_ACTUAL.tramos.find(function(t) { return t.id == id; });
+      if (!tramo) return;
+      
+      TRAMO_EDITANDO = tramo;
+      
+      document.getElementById("formId").value = tramo.id || "";
+      document.getElementById("formFechaInicio").value = tramo.fechaInicio || "";
+      document.getElementById("formFechaFin").value = tramo.fechaFin || "";
+      document.getElementById("formSalario").value = tramo.salarioEditable || "";
+      document.getElementById("formProyecto").value = tramo.proyecto || "";
+      document.getElementById("formRubro").value = tramo.rubro || "";
+      document.getElementById("formFuente").value = tramo.fuente || "";
+      document.getElementById("formComponente").value = tramo.componente || "";
+      document.getElementById("formSubcomponente").value = tramo.subcomponente || "";
+      document.getElementById("formCategoria").value = tramo.categoria || "";
+      document.getElementById("formResponsable").value = tramo.responsable || "";
+      
+      document.getElementById("modalTramo").style.display = "flex";
+      document.getElementById("tituloModal").textContent = "✏️ Editar Tramo";
+    }
+    
+    function cerrarModalTramo() {
+      document.getElementById("modalTramo").style.display = "none";
+      TRAMO_EDITANDO = null;
+    }
+    
+    function guardarTramo() {
+      if (!DATOS_ACTUAL || !DATOS_ACTUAL.empleado) return;
+      
+      var datos = {
+        id: document.getElementById("formId").value,
+        cedula: DATOS_ACTUAL.empleado.cedula,
+        contrato: DATOS_ACTUAL.cabecera ? DATOS_ACTUAL.cabecera.IDCONTRATO : "",
+        posicion: DATOS_ACTUAL.cabecera ? DATOS_ACTUAL.cabecera.POSICION : "",
+        fechaInicio: document.getElementById("formFechaInicio").value,
+        fechaFin: document.getElementById("formFechaFin").value,
+        salario: document.getElementById("formSalario").value,
+        proyecto: document.getElementById("formProyecto").value,
+        rubro: document.getElementById("formRubro").value,
+        fuente: document.getElementById("formFuente").value,
+        componente: document.getElementById("formComponente").value,
+        subcomponente: document.getElementById("formSubcomponente").value,
+        categoria: document.getElementById("formCategoria").value,
+        responsable: document.getElementById("formResponsable").value
+      };
+      
+      var btnGuardar = event.target;
+      btnGuardar.disabled = true;
+      btnGuardar.textContent = "Guardando...";
+      
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btnGuardar.disabled = false;
+          btnGuardar.textContent = "💾 Guardar";
+          
+          if (res && res.ok) {
+            cerrarModalTramo();
+            buscar(); // Recargar datos
+          } else {
+            alert("Error: " + (res?.message || "Error desconocido"));
+          }
+        })
+        .withFailureHandler(function(err) {
+          btnGuardar.disabled = false;
+          btnGuardar.textContent = "💾 Guardar";
+          alert("Error: " + err);
+        })
+        .guardarTramoFinanciacion(datos);
+    }
+    
+    function confirmarEliminar(id) {
+      ID_A_BORRAR = id;
+      document.getElementById("modalConfirmar").style.display = "flex";
+    }
+    
+    function cerrarModalConfirmar() {
+      document.getElementById("modalConfirmar").style.display = "none";
+      ID_A_BORRAR = null;
+    }
+    
+    function eliminarTramoConfirmado() {
+      if (!ID_A_BORRAR) return;
+      
+      var btnEliminar = document.querySelector(".btn-modal-delete");
+      btnEliminar.disabled = true;
+      btnEliminar.textContent = "Eliminando...";
+      
+      google.script.run
+        .withSuccessHandler(function(res) {
+          btnEliminar.disabled = false;
+          btnEliminar.textContent = "🗑️ Eliminar";
+          cerrarModalConfirmar();
+          
+          if (res && res.ok) {
+            buscar(); // Recargar datos
+          } else {
+            alert("Error: " + (res?.message || "Error desconocido"));
+          }
+        })
+        .withFailureHandler(function(err) {
+          btnEliminar.disabled = false;
+          btnEliminar.textContent = "🗑️ Eliminar";
+          alert("Error: " + err);
+        })
+        .eliminarTramoFinanciacion(ID_A_BORRAR);
+    }
+    
+    function verDetalleMes(anioMes) {
+      if (!DATOS_ACTUAL || !DATOS_ACTUAL.months) return;
+      
+      var mes = DATOS_ACTUAL.months.find(function(m) { return m.anioMes === anioMes; });
+      if (!mes || !mes.detalle) return;
+      
+      var html = '<div style="max-height:500px;overflow-y:auto;">';
+      html += '<h3 style="margin-top:0;color:var(--primary);border-bottom:2px solid var(--border);padding-bottom:12px;">' + formatMes(anioMes) + ' - Detalle Completo</h3>';
+      
+      mes.detalle.forEach(function(d) {
+        html += '<div class="detail-item">';
+        html += '<div class="detail-header">';
+        html += '<span>' + escapeHtml(getName('proyectos', d.proyecto)) + '</span>';
+        html += '<span>' + money(d.valor) + '</span>';
+        html += '</div>';
+        html += '<div class="detail-grid">';
+        html += '<div class="detail-row"><span>🏷️ Rubro:</span> ' + escapeHtml(d.rubro || "---") + '</div>';
+        html += '<div class="detail-row"><span>📅 Días:</span> ' + d.dias + '</div>';
+        html += '<div class="detail-row"><span>💰 Fuente:</span> ' + escapeHtml(getName('fuentes', d.fuente)) + '</div>';
+        html += '<div class="detail-row"><span>📦 Componente:</span> ' + escapeHtml(getName('componentes', d.componente)) + '</div>';
+        html += '<div class="detail-row"><span>📋 Subcomponente:</span> ' + escapeHtml(getName('subcomponentes', d.subcomponente)) + '</div>';
+        html += '<div class="detail-row"><span>🏷️ Categoría:</span> ' + escapeHtml(getName('categorias', d.categoria)) + '</div>';
+        html += '<div class="detail-row"><span>👤 Responsable:</span> ' + escapeHtml(getName('responsables', d.responsable)) + '</div>';
+        html += '<div class="detail-row"><span>💵 Salario Mensual:</span> ' + money(d.salarioMensual) + '</div>';
+        html += '</div>';
+        html += '<div class="detail-footer">';
+        html += '<div><strong>ID:</strong> ' + escapeHtml(d.id) + '</div>';
+        html += '<div><strong>Contrato:</strong> ' + escapeHtml(d.contrato || "---") + '</div>';
+        html += '</div>';
+        html += '</div>';
+      });
+      
+      html += '</div>';
+      
+      var modal = document.getElementById("modalDetalle");
+      document.getElementById("detalleContent").innerHTML = html;
+      modal.style.display = "flex";
+    }
+    
+    function cerrarModalDetalle() {
+      document.getElementById("modalDetalle").style.display = "none";
+    }
+    
+    // ==================== INICIALIZACIÓN ====================
+    window.onload = function() {
+      google.script.run
+        .withSuccessHandler(function(user) {
+          document.getElementById("userEmail").textContent = user.email || "Desconocido";
+        })
+        .getLoggedUser();
+      
+      asegurarCatalogos().then(function() {
+        poblarSelects();
+      });
+    };
+    
+    function poblarSelects() {
+      var selects = {
+        formProyecto: CATS.proyectos,
+        formFuente: CATS.fuentes,
+        formComponente: CATS.componentes,
+        formSubcomponente: CATS.subcomponentes,
+        formCategoria: CATS.categorias,
+        formResponsable: CATS.responsables
+      };
+      
+      for (var id in selects) {
+        var sel = document.getElementById(id);
+        if (!sel) continue;
+        
+        sel.innerHTML = '<option value="">-- Seleccione --</option>';
+        selects[id].forEach(function(item) {
+          var opt = document.createElement("option");
+          opt.value = item.id;
+          opt.textContent = item.nombre;
+          sel.appendChild(opt);
+        });
+      }
+    }
+
+    
+
+function irAVistaMensualizadaGlobal() {
+  document.getElementById("paginaInicio").style.display = "none";
+  document.getElementById("seccionConsulta").style.display = "none";
+  document.getElementById("vistaGlobal").style.display = "none";
+  document.getElementById("vistaIndividual").style.display = "none";
+  document.getElementById("vistaMensualizadaGlobal").style.display = "block";
+}
+
+function cargarMensualizadoGlobal() {
+  var msgDiv = document.getElementById("msgMensualizado");
+  msgDiv.style.display = "block";
+  msgDiv.textContent = "⏳ Cargando datos...";
+  msgDiv.className = "msg";
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) {
+        renderMensualizadoGlobal(res.data);
+        msgDiv.style.display = "none";
+      } else {
+        msgDiv.textContent = "❌ " + (res.message || "Error al cargar datos");
+        msgDiv.className = "msg err";
+      }
+    })
+    .withFailureHandler(function(err) {
+      msgDiv.textContent = "❌ Error: " + err;
+      msgDiv.className = "msg err";
+    })
+    .getMensualizadoGlobal();
+}
+
+function renderMensualizadoGlobal(meses) {
+  var container = document.getElementById("mensualizadoContent");
+
+  // ✅ Guardar cache para el "Ver Detalle"
+  MENSUALIZADO_GLOBAL_CACHE = Array.isArray(meses) ? meses : [];
+
+  if (!MENSUALIZADO_GLOBAL_CACHE.length) {
+    container.innerHTML = "<div class='msg warn'>No hay datos mensualizados</div>";
+    return;
+  }
+
+  var html = "<div class='tableWrap'><table><thead><tr><th>Mes</th><th>Total</th><th>Detalle</th></tr></thead><tbody>";
+  MENSUALIZADO_GLOBAL_CACHE.forEach(function(m) {
+    html += "<tr>";
+    html += "<td>" + formatMes(m.anioMes) + "</td>";
+    html += "<td class='num'>" + money(m.total) + "</td>";
+    html += "<td><button class='btnSecondary' style='width:auto;padding:8px 12px;' onclick='verDetalleMesGlobal(\"" + m.anioMes + "\")'>Ver Detalle</button></td>";
+    html += "</tr>";
+  });
+  html += "</tbody></table></div>";
+
+  container.innerHTML = html;
+}
+
+
+function descargarMensualizadoCSV() {
+  var msgDiv = document.getElementById("msgMensualizado");
+  msgDiv.style.display = "block";
+  msgDiv.textContent = "⏳ Generando archivo CSV...";
+  msgDiv.className = "msg";
+
+  google.script.run
+    .withSuccessHandler(function(res) {
+      if (res.ok) {
+        msgDiv.innerHTML = "✅ Archivo listo: <a href='" + res.url + "' target='_blank'>Descargar CSV</a>";
+        msgDiv.className = "msg ok";
+      } else {
+        msgDiv.textContent = "❌ " + (res.message || "Error generando CSV");
+        msgDiv.className = "msg err";
+      }
+    })
+    .withFailureHandler(function(err) {
+      msgDiv.textContent = "❌ Error: " + err;
+      msgDiv.className = "msg err";
+    })
+    .exportMensualizadoCSV();
+}
+
+// ==================== DETALLE MENSUALIZADO GLOBAL (NUEVO) ====================
+function verDetalleMesGlobal(anioMes) {
+  // ⚠️ NO confundir con verDetalleMes(anioMes) (empleado)
+
+  if (!MENSUALIZADO_GLOBAL_CACHE || !Array.isArray(MENSUALIZADO_GLOBAL_CACHE)) {
+    alert("Primero debes cargar los datos mensualizados globales.");
+    return;
+  }
+
+  var mesObj = MENSUALIZADO_GLOBAL_CACHE.find(function(x) { return x.anioMes === anioMes; });
+  if (!mesObj) {
+    alert("No se encontró información para el mes " + anioMes);
+    return;
+  }
+
+  // ✅ Igual que en buscar(): garantizar catálogos antes de usar getName('proyectos', ...)
+  asegurarCatalogos().then(function() {
+
+    var detalle = Array.isArray(mesObj.detalle) ? mesObj.detalle : [];
+
+    // ---- 1) Agrupar por proyecto (guardando id y nombre)
+    var porProyecto = {};
+    var totalMes = 0;
+
+    detalle.forEach(function(d) {
+      var proyId = d.proyecto || "SIN_PROY";
+
+      // ✅ nombre desde catálogo (si no existe, getName devuelve el id) :contentReference[oaicite:1]{index=1}
+      var proyNombre = getName("proyectos", proyId);
+
+      if (!porProyecto[proyId]) {
+        porProyecto[proyId] = {
+          proyectoId: proyId,
+          proyectoNombre: proyNombre,
+          total: 0,
+          tramos: 0,
+          contratos: new Set()
+        };
+      }
+
+      var val = Number(d.valor || 0) || 0;
+      porProyecto[proyId].total += val;
+      porProyecto[proyId].tramos += 1;
+      if (d.contrato) porProyecto[proyId].contratos.add(String(d.contrato));
+
+      totalMes += val;
+    });
+
+    var lista = Object.values(porProyecto).sort(function(a, b) { return b.total - a.total; });
+
+    // ---- 2) Render (mostrar NOMBRE, no CÓDIGO)
+    document.getElementById("detalleGlobalTitle").textContent =
+      "📅 " + formatMes(anioMes) + " · Resumen de Proyectos Financiadores";
+
+    var html = "";
+    html += "<div class='tableWrap' style='max-height:55vh;overflow:auto;'>";
+    html += "<table class='tabla-compacta' style='min-width:700px;'>";
+    html += "<thead><tr><th>Proyecto</th><th class='num'>Total mes</th><th class='num'># tramos</th><th class='num'># contratos</th></tr></thead>";
+    html += "<tbody id='tbodyDetalleGlobalProyectos'>";
+
+    lista.forEach(function(p) {
+      html += "<tr class='fila-proy-global' data-proy='" + escapeHtml(p.proyectoNombre).toLowerCase() + "'>";
+      html += "  <td style='font-weight:600;'>" + escapeHtml(p.proyectoNombre) + "</td>";
+      html += "  <td class='num'>" + money(p.total) + "</td>";
+      html += "  <td class='num'>" + p.tramos + "</td>";
+      html += "  <td class='num'>" + (p.contratos ? p.contratos.size : 0) + "</td>";
+      html += "</tr>";
+    });
+
+    html += "</tbody></table></div>";
+
+    document.getElementById("detalleGlobalContent").innerHTML = html;
+    document.getElementById("modalDetalleGlobal").style.display = "flex";
+
+  }).catch(function() {
+    alert("No fue posible cargar catálogos. Intenta de nuevo.");
+  });
+}
+
+
+// Filtro (solo front)
+function filtrarDetalleGlobalProyectos() {
+  var q = (document.getElementById("buscadorProyectoMesGlobal")?.value || "").toLowerCase().trim();
+  var filas = document.querySelectorAll("#tbodyDetalleGlobalProyectos .fila-proy-global");
+  filas.forEach(function(tr) {
+    var key = tr.getAttribute("data-proy") || "";
+    tr.style.display = (!q || key.indexOf(q) !== -1) ? "" : "none";
+  });
+}
+
+function cerrarModalDetalleGlobal() {
+  document.getElementById("modalDetalleGlobal").style.display = "none";
+}
+
+
+function renderDetalleMesGlobal(data) {
+  var html = "";
+  html += '<div style="max-height:560px;overflow-y:auto;">';
+  html += '<h3 style="margin-top:0;color:var(--primary);border-bottom:2px solid var(--border);padding-bottom:12px;">'
+       + formatMes(data.anioMes) + ' — Proyectos que financian el mes</h3>';
+
+  html += '<div class="hint" style="margin: 12px 0 18px 0;">'
+       + 'Total mes: <strong>' + money(data.totalMes) + '</strong> · '
+       + 'Proyectos: <strong>' + (data.cantidadProyectos || 0) + '</strong>'
+       + '</div>';
+
+  if (!data.proyectos || data.proyectos.length === 0) {
+    html += '<div class="msg warn">No hay proyectos para este mes.</div>';
+    html += '</div>';
+    document.getElementById("detalleGlobalContent").innerHTML = html;
+    return;
+  }
+
+  // Tabla resumen
+  html += "<div class='tableWrap'><table class='tabla-compacta'>";
+  html += "<thead><tr><th>Proyecto</th><th class='num'>Total</th><th>Tramos</th><th>Empleados</th></tr></thead><tbody>";
+  data.proyectos.forEach(function(p) {
+    html += "<tr>";
+    html += "<td>" + escapeHtml(p.proyectoNombre) + "</td>";
+    html += "<td class='num'>" + money(p.total) + "</td>";
+    html += "<td style='text-align:center;'>" + (p.cantidadTramos || 0) + "</td>";
+    html += "<td style='text-align:center;'>" + (p.cantidadEmpleados || 0) + "</td>";
+    html += "</tr>";
+  });
+  html += "</tbody></table></div>";
+
+  html += "</div>";
+  document.getElementById("detalleGlobalContent").innerHTML = html;
+}
+
+function cerrarModalDetalleGlobal() {
+  document.getElementById("modalDetalleGlobal").style.display = "none";
+}
+
+
+    
+    console.log("✅ Todas las funciones definidas");
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div>
+        <div class="title">Guadua</div>
+        <div class="subtitle">Herramienta sustentada en bases sólidas que permite articular la planeación de la nómina del Instituto</div>
+      </div>
+      <div class="userbox">
+        <div class="label">Usuario</div>
+        <div id="userEmail" class="value">—</div>
+      </div>
+    </header>
+
+    <!-- ========== PÁGINA INICIO ========== -->
+
+
+<div id="paginaInicio">
+  <section class="card">
+    <div style="text-align:center;padding:40px 20px;">
+      <div style="font-size:48px;margin-bottom:20px;">🎋</div>
+      <h2 style="font-size:28px;font-weight:600;color:var(--primary);margin-bottom:12px;">Bienvenido a Guadua</h2>
+      <p style="color:var(--text-muted);font-size:16px;max-width:600px;margin:0 auto 40px;">
+        Sistema integral de planeación y gestión de nómina del Instituto Humboldt
+      </p>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;">
+      <!-- Consultar Empleado -->
+      <div class="menu-card" onclick="irAConsultaEmpleado()">
+        <div class="menu-icon">👤</div>
+        <div class="menu-title">Consultar Empleado</div>
+        <div class="menu-desc">Buscar por cédula y ver información detallada</div>
+        <div class="menu-arrow">→</div>
+      </div>
+
+      <!-- Dashboard Global -->
+      <div class="menu-card" onclick="irADashboardGlobal()">
+        <div class="menu-icon">🌍</div>
+        <div class="menu-title">Dashboard Global</div>
+        <div class="menu-desc">Vista consolidada de la organización</div>
+        <div class="menu-arrow">→</div>
+      </div>
+
+      <!-- Vista Mensualizada (usa tu función de navegación) -->
+      <div class="menu-card" onclick="irAVistaMensualizadaGlobal()">
+        <div class="menu-icon">📅</div>
+        <div class="menu-title">Vista Mensualizada</div>
+        <div class="menu-desc">Ver todos los datos mensualizados y exportar a Excel</div>
+        <div class="menu-arrow">→</div>
+      </div>
+    </div>
+  </section>
+</div>
+
+
+
+    <!-- ========== SECCIÓN CONSULTA ========== -->
+    <div id="seccionConsulta" style="display:none;">
+      <button class="btnSecondary" onclick="volverAlInicio()" style="width:auto;padding:10px 20px;margin-bottom:20px;">← Volver</button>
+      <section class="card">
+        <div class="row" style="grid-template-columns:1fr 180px;">
+          <div class="field">
+            <label>Cédula del Trabajador</label>
+            <input id="cedula" placeholder="Ej: 123456789" />
+          </div>
+          <div class="field">
+            <label>&nbsp;</label>
+            <button id="btnBuscar" onclick="buscar()">🔍 Buscar</button>
+          </div>
+        </div>
+        <div id="msg" class="msg"></div>
+      </section>
+
+      <!-- TABS -->
+      <section id="tabNavigation" class="card" style="display:none;">
+        <div class="sectionTitle">Navegación por Pestañas</div>
+      </section>
+
+      <!-- VISTA DETALLADA -->
+      <div id="vistaDetallada">
+        <!-- Datos del Empleado -->
+        <section id="secEmpleado" class="card" style="display:none;">
+          <div class="sectionTitle">👤 Datos del Empleado</div>
+          <div id="kpiBox"></div>
+          <div id="msgContrato" class="msg"></div>
+        </section>
+
+        <!-- Tramos -->
+        <section id="secTramos" class="card" style="display:none;">
+          <div class="header-actions">
+            <div class="sectionTitle">📋 Tramos de Financiación</div>
+            <button class="btnAdd" onclick="nuevoTramo()"><span>+</span> Nuevo Tramo</button>
+          </div>
+          <div class="tableWrap">
+            <table id="tblTramos">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Inicio</th>
+                  <th>Fin</th>
+                  <th>Salario</th>
+                  <th>Proyecto</th>
+                  <th>Rubro</th>
+                  <th>Fuente</th>
+                  <th>Componente</th>
+                  <th>Responsable</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Mensualizado -->
+        <section id="secMensual" class="card" style="display:none;">
+          <div class="sectionTitle">📅 Vista Mensualizada</div>
+          <div class="tableWrap">
+            <table id="tblMeses">
+              <thead>
+                <tr>
+                  <th>Mes</th>
+                  <th>Total</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Resumen -->
+        <section id="secResumen" class="card" style="display:none;">
+          <div class="sectionTitle">📊 Resumen General</div>
+          <div id="resumenBox"></div>
+        </section>
+      </div>
+    </div>
+
+    <!-- ========== VISTA GLOBAL ========== -->
+    <div id="vistaGlobal" style="display:none;">
+      <button class="btnSecondary" onclick="volverAlInicio()" style="width:auto;padding:10px 20px;margin-bottom:20px;">← Volver</button>
+      <section class="card">
+        <div class="sectionTitle">🌍 Dashboard Global</div>
+        <div id="msgGlobal" class="msg" style="display:none;"></div>
+        <button onclick="cargarDashboardGlobal()" style="margin-bottom:20px;">📊 Cargar Dashboard Global</button>
+        <div id="dashGlobalContent"></div>
+      </section>
+    </div>
+
+    
+    <!-- ========== VISTA MENSUALIZADA GLOBAL (DEBE IR FUERA DE #paginaInicio) ========== -->
+    <div id="vistaMensualizadaGlobal" style="display:none;">
+      <button class="btnSecondary" onclick="volverAlInicio()" style="width:auto;padding:10px 20px;margin-bottom:20px;">← Volver</button>
+
+      <section class="card">
+        <div class="sectionTitle">📅 Vista Mensualizada Global</div>
+
+        <!-- Mensajes (progreso / errores / link CSV) -->
+        <div id="msgMensualizado" class="msg" style="display:none;"></div>
+
+        <!-- Acciones -->
+        <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:20px;">
+          <button onclick="cargarMensualizadoGlobal()">📊 Cargar Datos Mensualizados</button>
+          <button onclick="descargarMensualizadoCSV()">⬇️ Descargar CSV</button>
+        </div>
+
+        <!-- Contenido de la tabla -->
+        <div id="mensualizadoContent"></div>
+      </section>
+    </div>
+    
+
+
+    <!-- ========== VISTA INDIVIDUAL ========== -->
+    <div id="vistaIndividual" style="display:none;">Individual</div>
+  </div>
+
+  <!-- ========== MODAL TRAMO ========== -->
+  <div id="modalTramo" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width:800px;max-height:90vh;overflow-y:auto;">
+      <div id="tituloModal" class="modal-title">➕ Nuevo Tramo</div>
+      <input type="hidden" id="formId" />
+      
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:20px 0;text-align:left;">
+        <div class="field">
+          <label>Fecha Inicio</label>
+          <input type="date" id="formFechaInicio" />
+        </div>
+        <div class="field">
+          <label>Fecha Fin</label>
+          <input type="date" id="formFechaFin" />
+        </div>
+        <div class="field">
+          <label>Salario</label>
+          <input type="number" id="formSalario" placeholder="Ej: 5000000" />
+        </div>
+        <div class="field">
+          <label>Rubro</label>
+          <input type="text" id="formRubro" placeholder="Ej: Personal" />
+        </div>
+        <div class="field">
+          <label>Proyecto</label>
+          <select id="formProyecto"></select>
+        </div>
+        <div class="field">
+          <label>Fuente</label>
+          <select id="formFuente"></select>
+        </div>
+        <div class="field">
+          <label>Componente</label>
+          <select id="formComponente"></select>
+        </div>
+        <div class="field">
+          <label>Subcomponente</label>
+          <select id="formSubcomponente"></select>
+        </div>
+        <div class="field">
+          <label>Categoría</label>
+          <select id="formCategoria"></select>
+        </div>
+        <div class="field">
+          <label>Responsable</label>
+          <select id="formResponsable"></select>
+        </div>
+      </div>
+      
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" onclick="cerrarModalTramo()">Cancelar</button>
+        <button onclick="guardarTramo()">💾 Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MODAL CONFIRMACIÓN ========== -->
+  <div id="modalConfirmar" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <div class="modal-icon">⚠️</div>
+      <div class="modal-title">Confirmar Eliminación</div>
+      <div class="modal-desc">¿Estás seguro de que deseas eliminar este tramo? <strong>Esta acción no se puede deshacer.</strong></div>
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" onclick="cerrarModalConfirmar()">Cancelar</button>
+        <button class="btn-modal-delete" onclick="eliminarTramoConfirmado()">🗑️ Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MODAL DETALLE ========== -->
+  <div id="modalDetalle" class="modal-overlay" style="display:none;">
+    <div class="modal-card" style="max-width:700px;">
+      <div id="detalleContent"></div>
+      <button onclick="cerrarModalDetalle()" style="margin-top:20px;">Cerrar</button>
+    </div>
+  </div>
+ 
+ <!-- ========== MODAL DETALLE MENSUALIZADO GLOBAL (NUEVO) ========== -->
+  <div id="modalDetalleGlobal" class="modal-overlay" style="display:none;">
+  <div class="modal-card" style="max-width:980px;max-height:90vh;overflow:auto;text-align:left;">
+    <div style="display:flex;align-items:center;gap:12px;justify-content:space-between;margin-bottom:14px;">
+      <div id="detalleGlobalTitle" style="font-size:18px;font-weight:700;color:var(--primary-dark);">
+        📅 Resumen Global
+      </div>
+      <button class="btnSecondary" style="width:auto;padding:10px 14px;" onclick="cerrarModalDetalleGlobal()">✖ Cerrar</button>
+    </div>
+
+    <div id="detalleGlobalContent"></div>
+  </div>
+</div>
+
+
+</body>
+</html>
