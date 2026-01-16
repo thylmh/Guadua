@@ -574,6 +574,12 @@
       html += '<div class="kpi-desc">Meses analizados</div></div>';
       
       html += '</div>';
+
+      // ==================== GRAFICA POR DIRECCIÓN ====================
+      html += '<div style="margin-top:16px;margin-bottom:48px;">';
+      html += '<div style="font-size:16px;font-weight:600;color:var(--primary-dark);margin-bottom:12px;">🏢 Total por Dirección</div>';
+      html += '<div id="direccionTotalesContainer" class="msg">⏳ Cargando totales por dirección...</div>';
+      html += '</div>';
       
       // Tabla Consolidada Proyecto vs Mes
       html += '<div style="margin-top:32px;margin-bottom:48px;">';
@@ -653,6 +659,7 @@
       html += '</div>';
       
       container.innerHTML = html;
+      cargarTotalesPorDireccion();
     }
 
     function cargarDetalleProyectoGlobal() {
@@ -923,6 +930,57 @@
       html += '</tr>';
 
       html += '</tbody></table></div>';
+      container.innerHTML = html;
+    }
+
+    function cargarTotalesPorDireccion() {
+      var container = document.getElementById("direccionTotalesContainer");
+      if (!container) return;
+      container.innerHTML = "⏳ Cargando totales por dirección...";
+
+      google.script.run
+        .withSuccessHandler(function(res) {
+          if (!res || !res.ok) {
+            container.innerHTML = "<div class='msg err'>❌ Error: " + (res?.message || "Sin datos") + "</div>";
+            return;
+          }
+          renderTotalesPorDireccion(res.data);
+        })
+        .withFailureHandler(function(err) {
+          container.innerHTML = "<div class='msg err'>❌ Error: " + err + "</div>";
+        })
+        .getDashboardDireccionTotales();
+    }
+
+    function renderTotalesPorDireccion(data) {
+      var container = document.getElementById("direccionTotalesContainer");
+      if (!data || !data.items || !data.items.length) {
+        container.innerHTML = "<div class='msg warn'>No hay datos para direcciones.</div>";
+        return;
+      }
+
+      var totalGeneral = Number(data.totalGeneral) || 0;
+      if (totalGeneral === 0) {
+        container.innerHTML = "<div class='msg warn'>No hay valores para direcciones.</div>";
+        return;
+      }
+
+      var html = '<div style="display:grid;gap:12px;">';
+      data.items.forEach(function(item) {
+        var total = Number(item.total) || 0;
+        var pct = Math.round((total / totalGeneral) * 1000) / 10;
+        var barWidth = Math.max(2, Math.min(100, pct));
+        html += '<div style="display:grid;gap:6px;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--text-muted);">';
+        html += '<span>' + escapeHtml(item.direccion) + '</span>';
+        html += '<span>' + moneyCompact(total) + ' · ' + pct.toFixed(1) + '%</span>';
+        html += '</div>';
+        html += '<div style="height:8px;background:rgba(0,77,103,0.08);border-radius:8px;overflow:hidden;">';
+        html += '<div style="height:100%;width:' + barWidth + '%;background:linear-gradient(135deg,var(--primary) 0%,var(--accent) 100%);"></div>';
+        html += '</div>';
+        html += '</div>';
+      });
+      html += '</div>';
       container.innerHTML = html;
     }
     

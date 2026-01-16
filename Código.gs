@@ -224,6 +224,7 @@ function invalidateGlobalCache_() {
     c.remove("MENSUALIZADOS_GLOBAL_V2");
     c.remove("DASHBOARD_GLOBAL_V1");
     c.remove("DASHBOARD_EMPLEADOS_GLOBAL_V1");
+    c.remove("DASHBOARD_DIRECCION_V1");
   } catch (e) {}
 }
 
@@ -734,6 +735,60 @@ function getDashboardEmpleadosGlobal() {
     return payload;
   } catch (e) {
     return { ok: false, message: "Error al generar empleados global: " + e.toString() };
+  }
+}
+
+function getDashboardDireccionTotales() {
+  try {
+    const cacheKey = "DASHBOARD_DIRECCION_V1";
+    const cached = cacheGetJSON_(cacheKey);
+    if (cached) return cached;
+
+    const { TABLES, COLS } = CONFIG;
+
+    const contratos = appsheetPost_(TABLES.CONTRATOS, "Find", [], {});
+    const mapDireccion = {};
+    contratos.forEach(con => {
+      const cedula = con[COLS.CON.CEDULA];
+      if (!cedula) return;
+      const direccion = con[COLS.CON.DIRECCION] || "Sin Dirección";
+      if (direccion && String(con["Estado"] || "").toLowerCase().includes("activo")) {
+        mapDireccion[String(cedula)] = String(direccion);
+      }
+    });
+
+    const tramos = appsheetPost_(TABLES.FINANCIACION, "Find", [], {}) || [];
+    if (!tramos.length) return { ok: false, message: "No hay datos de financiación disponibles" };
+
+    const mapTramos = makeIdMap_(tramos, COLS.FIN.ID);
+    const mensualizados = mensualizarBase30(tramos);
+
+    const totalsByDireccion = {};
+    let totalGeneral = 0;
+
+    mensualizados.forEach(mes => {
+      (mes.detalle || []).forEach(d => {
+        const tramo = mapTramos[String(d.id)];
+        if (!tramo) return;
+        const cedula = tramo[COLS.FIN.CEDULA];
+        const direccion = mapDireccion[String(cedula)] || "Sin Dirección";
+        if (!direccion || direccion === "Sin Dirección") return;
+        const valor = Number(d.valor) || 0;
+        totalGeneral += valor;
+        totalsByDireccion[direccion] = (totalsByDireccion[direccion] || 0) + valor;
+      });
+    });
+
+    const items = Object.keys(totalsByDireccion).map(dir => ({
+      direccion: dir,
+      total: totalsByDireccion[dir]
+    })).sort((a, b) => b.total - a.total);
+
+    const payload = { ok: true, data: { totalGeneral, items } };
+    cachePutJSON_(cacheKey, payload, 300);
+    return payload;
+  } catch (e) {
+    return { ok: false, message: "Error al generar totales por dirección: " + e.toString() };
   }
 }
 
