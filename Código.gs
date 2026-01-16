@@ -223,6 +223,7 @@ function invalidateGlobalCache_() {
     const c = CacheService.getScriptCache();
     c.remove("MENSUALIZADOS_GLOBAL_V2");
     c.remove("DASHBOARD_GLOBAL_V1");
+    c.remove("DASHBOARD_EMPLEADOS_GLOBAL_V1");
   } catch (e) {}
 }
 
@@ -638,6 +639,101 @@ function getDashboardDetalleProyecto(params) {
     return payload;
   } catch (e) {
     return { ok: false, message: "Error al generar detalle: " + e.toString() };
+  }
+}
+
+function getDashboardEmpleadosGlobal() {
+  try {
+    const cacheKey = "DASHBOARD_EMPLEADOS_GLOBAL_V1";
+    const cached = cacheGetJSON_(cacheKey);
+    if (cached) return cached;
+
+    const { TABLES, COLS } = CONFIG;
+
+    const catalogoProyectos = getCatalogoDim_("DimProyectos", "CODIGO", "NOMBRE");
+    const mapProyectos = {};
+    catalogoProyectos.forEach(p => {
+      mapProyectos[p.id] = p.nombre;
+    });
+
+    const todosEmpleados = appsheetPost_(TABLES.EMPLEADOS, "Find", [], {});
+    const mapEmpleados = {};
+    todosEmpleados.forEach(emp => {
+      mapEmpleados[emp[COLS.EMP.CEDULA]] = emp[COLS.EMP.NOMBRE];
+    });
+
+    const todosContratos = appsheetPost_(TABLES.CONTRATOS, "Find", [], {});
+    const mapDireccionGerencia = {};
+    todosContratos.forEach(con => {
+      const cedula = con[COLS.CON.CEDULA];
+      if (cedula && con["Estado"] && String(con["Estado"]).toLowerCase().includes("activo")) {
+        mapDireccionGerencia[cedula] = {
+          direccion: con[COLS.CON.DIRECCION] || "Sin Dirección",
+          gerencia: con[COLS.CON.GERENCIA] || "Sin Gerencia",
+          fTerminacion: con[COLS.CON.F_TERMINACION] || "",
+          prorrogas: con[COLS.CON.PRORROGAS] || 0
+        };
+      }
+    });
+
+    const tramos = appsheetPost_(TABLES.FINANCIACION, "Find", [], {}) || [];
+    if (!tramos.length) return { ok: false, message: "No hay datos de financiación disponibles" };
+
+    const mapTramos = makeIdMap_(tramos, COLS.FIN.ID);
+    const mensualizados = mensualizarBase30(tramos);
+    const meses = mensualizados.map(m => m.anioMes);
+
+    const empleados = {};
+
+    mensualizados.forEach(mes => {
+      (mes.detalle || []).forEach(d => {
+        const tramo = mapTramos[String(d.id)];
+        if (!tramo) return;
+
+        const cedula = tramo[COLS.FIN.CEDULA];
+        const nombreEmpleado = cedula ? (mapEmpleados[cedula] || cedula) : "Sin nombre";
+        const infoContrato = cedula ? mapDireccionGerencia[cedula] : null;
+        const proyectoNombre = mapProyectos[tramo[COLS.FIN.PROY]] || tramo[COLS.FIN.PROY] || "";
+
+        if (!empleados[nombreEmpleado]) {
+          empleados[nombreEmpleado] = {
+            cedula: cedula,
+            direccion: infoContrato ? infoContrato.direccion : "Sin Dirección",
+            gerencia: infoContrato ? infoContrato.gerencia : "Sin Gerencia",
+            fTerminacion: infoContrato ? infoContrato.fTerminacion : "",
+            prorrogas: infoContrato ? infoContrato.prorrogas : 0,
+            proyectos: new Set(),
+            meses: {}
+          };
+        }
+
+        if (proyectoNombre) empleados[nombreEmpleado].proyectos.add(proyectoNombre);
+        if (!empleados[nombreEmpleado].meses[mes.anioMes]) {
+          empleados[nombreEmpleado].meses[mes.anioMes] = 0;
+        }
+        empleados[nombreEmpleado].meses[mes.anioMes] += d.valor || 0;
+      });
+    });
+
+    const empleadosPayload = {};
+    Object.keys(empleados).forEach(nombre => {
+      const item = empleados[nombre];
+      empleadosPayload[nombre] = {
+        cedula: item.cedula,
+        direccion: item.direccion,
+        gerencia: item.gerencia,
+        fTerminacion: item.fTerminacion,
+        prorrogas: item.prorrogas,
+        proyectos: Array.from(item.proyectos).sort(),
+        meses: item.meses
+      };
+    });
+
+    const payload = { ok: true, data: { meses, empleados: empleadosPayload } };
+    cachePutJSON_(cacheKey, payload, 300);
+    return payload;
+  } catch (e) {
+    return { ok: false, message: "Error al generar empleados global: " + e.toString() };
   }
 }
 
