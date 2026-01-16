@@ -1,7 +1,8 @@
 /***** CONFIGURACIÓN *****/
 function getAppSheetConfig_() {
   const p = PropertiesService.getScriptProperties();
-  const host = p.getProperty("APPSHEET_HOST") || "https://api.appsheet.com";
+  const hostRaw = p.getProperty("APPSHEET_HOST") || "https://api.appsheet.com";
+  const host = hostRaw.startsWith("http") ? hostRaw : `https://${hostRaw}`;
   const appId = p.getProperty("APPSHEET_APP_ID");
   const key = p.getProperty("APPSHEET_ACCESS_KEY");
 
@@ -98,9 +99,11 @@ function include(filename) {
 
 /***** APPSHEET API *****/
 function appsheetPost_(tableName, action, rows = [], properties = {}) {
-  const { host, appId, key } = getAppSheetConfig_();
-  const baseHost = host.startsWith('http') ? host : `https://${host}`;
-  const url = `${baseHost}/api/v2/apps/${appId}/tables/${encodeURIComponent(tableName)}/Action`;
+  const config = getAppSheetConfig_();
+  const host = config.host;
+  const appId = config.appId;
+  const key = config.key;
+  const url = `${host}/api/v2/apps/${appId}/tables/${encodeURIComponent(tableName)}/Action`;
   
   const payload = { Action: action, Properties: properties, Rows: rows };
   const options = {
@@ -219,6 +222,7 @@ function invalidateGlobalCache_() {
   try {
     const c = CacheService.getScriptCache();
     c.remove("MENSUALIZADOS_GLOBAL_V2");
+    c.remove("DASHBOARD_GLOBAL_V1");
   } catch (e) {}
 }
 
@@ -497,6 +501,10 @@ function getLoggedUser() {
 /***** DASHBOARD GLOBAL *****/
 function getDashboardGlobal() {
   try {
+    const cacheKey = "DASHBOARD_GLOBAL_V1";
+    const cached = cacheGetJSON_(cacheKey);
+    if (cached) return cached;
+
     const { TABLES, COLS } = CONFIG;
     
     // 1. Obtener catálogo de proyectos para mapear nombres
@@ -505,40 +513,12 @@ function getDashboardGlobal() {
     catalogoProyectos.forEach(p => {
       mapProyectos[p.id] = p.nombre;
     });
-    
-    // 2. Obtener TODOS los empleados para mapear nombres
-    const todosEmpleados = appsheetPost_(TABLES.EMPLEADOS, "Find", [], {});
-    const mapEmpleados = {};
-    todosEmpleados.forEach(emp => {
-      mapEmpleados[emp[COLS.EMP.CEDULA]] = emp[COLS.EMP.NOMBRE];
-    });
-    
-    // 2b. Obtener contratos para mapear Dirección y Gerencia
-    const todosContratos = appsheetPost_(TABLES.CONTRATOS, "Find", [], {});
-    const mapDireccionGerencia = {};
-    todosContratos.forEach(con => {
-      const cedula = con[COLS.CON.CEDULA];
-      if (cedula && con["Estado"] && String(con["Estado"]).toLowerCase().includes("activo")) {
-        mapDireccionGerencia[cedula] = {
-          direccion: con[COLS.CON.DIRECCION] || "Sin Dirección",
-          gerencia: con[COLS.CON.GERENCIA] || "Sin Gerencia",
-          fTerminacion: con[COLS.CON.F_TERMINACION] || "",
-          prorrogas: con[COLS.CON.PRORROGAS] || 0
-        };
-      }
-    });
-    
-    // 3. Crear mapa de tramos por ID para búsqueda rápida
+
     const todosLosTramos = appsheetPost_(TABLES.FINANCIACION, "Find", [], {});
     
     if (!todosLosTramos || todosLosTramos.length === 0) {
       return { ok: false, message: "No hay datos de financiación disponibles" };
     }
-
-    const mapTramos = {};
-    todosLosTramos.forEach(t => {
-      mapTramos[t[COLS.FIN.ID]] = t;
-    });
 
     // 4. Mensualizar todos los tramos
     const todosMensualizados = mensualizarBase30(todosLosTramos);
@@ -548,17 +528,10 @@ function getDashboardGlobal() {
     const proyectosSet = new Set();
     const cedulasUnicas = new Set();
     
-    // 6. NUEVA ESTRUCTURA: Proyecto > Empleado > Mes
-    const proyectoEmpleadoMes = {};
-    
     todosMensualizados.forEach(mes => {
       mes.detalle.forEach(d => {
         const codigoProyecto = d.proyecto;
         const nombreProyecto = mapProyectos[codigoProyecto] || codigoProyecto;
-        const tramoOriginal = mapTramos[d.id];
-        const cedula = tramoOriginal ? tramoOriginal[COLS.FIN.CEDULA] : null;
-        const nombreEmpleado = cedula ? (mapEmpleados[cedula] || cedula) : "Sin nombre";
-        
         proyectosSet.add(nombreProyecto);
         
         // Tabla consolidada original (Proyecto vs Mes)
@@ -569,26 +542,6 @@ function getDashboardGlobal() {
           proyectosPorMes[nombreProyecto][mes.anioMes] = 0;
         }
         proyectosPorMes[nombreProyecto][mes.anioMes] += d.valor || 0;
-        
-        // NUEVA ESTRUCTURA: Proyecto > Empleado > Mes
-        if (!proyectoEmpleadoMes[nombreProyecto]) {
-          proyectoEmpleadoMes[nombreProyecto] = {};
-        }
-        if (!proyectoEmpleadoMes[nombreProyecto][nombreEmpleado]) {
-          const infoContrato = cedula ? mapDireccionGerencia[cedula] : null;
-          proyectoEmpleadoMes[nombreProyecto][nombreEmpleado] = {
-            cedula: cedula,
-            direccion: infoContrato ? infoContrato.direccion : "Sin Dirección",
-            gerencia: infoContrato ? infoContrato.gerencia : "Sin Gerencia",
-            fTerminacion: infoContrato ? infoContrato.fTerminacion : "",
-            prorrogas: infoContrato ? infoContrato.prorrogas : 0,
-            meses: {}
-          };
-        }
-        if (!proyectoEmpleadoMes[nombreProyecto][nombreEmpleado].meses[mes.anioMes]) {
-          proyectoEmpleadoMes[nombreProyecto][nombreEmpleado].meses[mes.anioMes] = 0;
-        }
-        proyectoEmpleadoMes[nombreProyecto][nombreEmpleado].meses[mes.anioMes] += d.valor || 0;
       });
     });
     
@@ -604,11 +557,10 @@ function getDashboardGlobal() {
     
     const proyectos = Array.from(proyectosSet).sort();
     
-    return {
+    const payload = {
       ok: true,
       data: {
         proyectosPorMes: proyectosPorMes,
-        proyectoEmpleadoMes: proyectoEmpleadoMes, // NUEVA ESTRUCTURA
         proyectos: proyectos,
         totales: {
           totalGeneral: totalGeneral,
@@ -617,10 +569,75 @@ function getDashboardGlobal() {
         }
       }
     };
+    cachePutJSON_(cacheKey, payload, 300);
+    return payload;
     
   } catch (e) {
     Logger.log("Error getDashboardGlobal: " + e.toString());
     return { ok: false, message: "Error al generar dashboard global: " + e.toString() };
+  }
+}
+
+function getDashboardDetalleProyecto(params) {
+  try {
+    const { proyecto = "" } = params || {};
+    if (!proyecto) return { ok: false, message: "Debe indicar un proyecto." };
+
+    const cacheKey = "DASHBOARD_DETALLE_PROYECTO_" + proyecto;
+    const cached = cacheGetJSON_(cacheKey);
+    if (cached) return cached;
+
+    const { TABLES, COLS } = CONFIG;
+
+    const catalogoProyectos = getCatalogoDim_("DimProyectos", "CODIGO", "NOMBRE");
+    const mapNombreCodigo = {};
+    const mapCodigoNombre = {};
+    catalogoProyectos.forEach(p => {
+      mapNombreCodigo[String(p.nombre)] = String(p.id);
+      mapCodigoNombre[String(p.id)] = String(p.nombre);
+    });
+
+    const codigoProyecto = mapNombreCodigo[proyecto] || proyecto;
+    const nombreProyecto = mapCodigoNombre[codigoProyecto] || proyecto;
+
+    const todosEmpleados = appsheetPost_(TABLES.EMPLEADOS, "Find", [], {});
+    const mapEmpleados = {};
+    todosEmpleados.forEach(emp => {
+      mapEmpleados[emp[COLS.EMP.CEDULA]] = emp[COLS.EMP.NOMBRE];
+    });
+
+    const tramos = appsheetPost_(TABLES.FINANCIACION, "Find", [], {});
+    const tramosProyecto = (tramos || []).filter(t => String(t[COLS.FIN.PROY] || "") === String(codigoProyecto));
+    if (!tramosProyecto.length) {
+      return { ok: true, data: { proyecto: nombreProyecto, meses: [], empleados: {} } };
+    }
+
+    const mensualizados = mensualizarBase30(tramosProyecto);
+    const meses = mensualizados.map(m => m.anioMes);
+    const mapTramos = makeIdMap_(tramosProyecto, COLS.FIN.ID);
+    const empleados = {};
+
+    mensualizados.forEach(mes => {
+      mes.detalle.forEach(d => {
+        const tramo = mapTramos[String(d.id)];
+        const cedula = tramo ? tramo[COLS.FIN.CEDULA] : null;
+        const nombreEmpleado = cedula ? (mapEmpleados[cedula] || cedula) : "Sin nombre";
+
+        if (!empleados[nombreEmpleado]) {
+          empleados[nombreEmpleado] = { cedula: cedula, meses: {} };
+        }
+        if (!empleados[nombreEmpleado].meses[mes.anioMes]) {
+          empleados[nombreEmpleado].meses[mes.anioMes] = 0;
+        }
+        empleados[nombreEmpleado].meses[mes.anioMes] += d.valor || 0;
+      });
+    });
+
+    const payload = { ok: true, data: { proyecto: nombreProyecto, meses, empleados } };
+    cachePutJSON_(cacheKey, payload, 300);
+    return payload;
+  } catch (e) {
+    return { ok: false, message: "Error al generar detalle: " + e.toString() };
   }
 }
 
@@ -790,6 +807,3 @@ function getResumenMesGlobal(anioMes) {
     return { ok: false, message: "Error en getResumenMesGlobal: " + e.toString() };
   }
 }
-
-
-
