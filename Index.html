@@ -175,7 +175,7 @@
     
     // ==================== CATÁLOGOS ====================
     function asegurarCatalogos() {
-      return new Promise(function(resolve, reject) {
+      return new Promise(function(resolve) {
         if (CATALOGOS_CARGADOS) {
           resolve(true);
           return;
@@ -196,7 +196,11 @@
             CATALOGOS_CARGADOS = true;
             resolve(data);
           })
-          .withFailureHandler(reject)
+          .withFailureHandler(function(err) {
+            console.warn("Error cargando catálogos:", err);
+            CATALOGOS_CARGADOS = true;
+            resolve(CATS);
+          })
           .getCatalogosFinanciacion();
       });
     }
