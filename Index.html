@@ -696,10 +696,19 @@
 
       var html = '';
       html += '<div style="margin-bottom:16px;background:rgba(255,255,255,0.5);border-radius:16px;padding:24px;border:1px solid rgba(0,77,103,0.12);">';
+      var totalProyecto = 0;
+      nombresEmpleados.forEach(function(nombreEmpleado) {
+        var datosEmpleado = empleados[nombreEmpleado];
+        if (!datosEmpleado || !datosEmpleado.meses) return;
+        Object.keys(datosEmpleado.meses).forEach(function(mes) {
+          totalProyecto += Number(datosEmpleado.meses[mes]) || 0;
+        });
+      });
+
       html += '<div style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:16px;display:flex;align-items:center;gap:8px;">';
       html += '<span style="font-size:20px;">🎯</span>';
       html += '<span>' + escapeHtml(data.proyecto || "") + '</span>';
-      html += '<span style="margin-left:auto;font-size:13px;color:var(--text-muted);font-weight:500;">' + nombresEmpleados.length + ' empleado(s)</span>';
+      html += '<span style="margin-left:auto;font-size:13px;color:var(--text-muted);font-weight:500;">' + nombresEmpleados.length + ' empleado(s) · Total: ' + moneyCompact(totalProyecto) + '</span>';
       html += '</div>';
       html += '<div class="tableWrap"><table class="tabla-compacta"><thead><tr>';
       html += '<th style="position:sticky;left:0;background:#F8FAFB;z-index:10;min-width:200px;font-size:10px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">Empleado</th>';
