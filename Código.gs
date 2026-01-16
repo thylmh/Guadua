@@ -99,7 +99,10 @@ function include(filename) {
 
 /***** APPSHEET API *****/
 function appsheetPost_(tableName, action, rows = [], properties = {}) {
-  const { host, appId, key } = getAppSheetConfig_();
+  const config = getAppSheetConfig_();
+  const host = config.host;
+  const appId = config.appId;
+  const key = config.key;
   const url = `${host}/api/v2/apps/${appId}/tables/${encodeURIComponent(tableName)}/Action`;
   
   const payload = { Action: action, Properties: properties, Rows: rows };

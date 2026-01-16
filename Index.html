@@ -216,7 +216,7 @@
       btn.disabled = true;
       btn.textContent = "Consultando...";
       
-      asegurarCatalogos().then(function() {
+      function ejecutarConsulta() {
         google.script.run
           .withSuccessHandler(function(res) {
             btn.disabled = false;
@@ -241,11 +241,14 @@
             setMsg("Error: " + err, "err");
           })
           .getVistaFinanciacion({cedula: cedula});
-      }).catch(function(e) {
-        btn.disabled = false;
-        btn.textContent = "🔍 Buscar";
-        setMsg("Error cargando catálogos", "err");
-      });
+      }
+
+      asegurarCatalogos()
+        .then(ejecutarConsulta)
+        .catch(function(e) {
+          console.warn("Catálogos no disponibles, continuando sin ellos:", e);
+          ejecutarConsulta();
+        });
     }
     
     function renderEmpleadoSimple(emp, con) {
