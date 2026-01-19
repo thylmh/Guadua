@@ -894,6 +894,69 @@
   .tableWrap::-webkit-scrollbar-thumb:hover { 
     background: linear-gradient(135deg, var(--primary-light) 0%, var(--primary-lighter) 100%); 
   }
+
+  /* --- GRÁFICA POR DIRECCIÓN --- */
+  .direccion-chart {
+    display: grid;
+    gap: 16px;
+  }
+
+  .direccion-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .direccion-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .direccion-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 3px rgba(0, 77, 103, 0.08);
+  }
+
+  .direccion-bars {
+    display: grid;
+    gap: 12px;
+  }
+
+  .direccion-bar-row {
+    display: grid;
+    gap: 6px;
+  }
+
+  .direccion-bar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .direccion-bar-track {
+    height: 10px;
+    background: rgba(0, 77, 103, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .direccion-bar {
+    display: flex;
+    height: 100%;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .direccion-segment {
+    height: 100%;
+  }
   
   table { 
     width: 100%; 
