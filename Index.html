@@ -989,6 +989,13 @@
       });
       var tiposLista = Array.from(tiposSet).sort();
 
+      var maxTotal = 0;
+      data.items.forEach(function(item) {
+        var total = Number(item.total) || 0;
+        if (total > maxTotal) maxTotal = total;
+      });
+      var logMax = Math.log10(maxTotal + 1) || 1;
+
       var html = '<div class="direccion-chart">';
       if (tiposLista.length) {
         html += '<div class="direccion-legend">';
@@ -1006,7 +1013,7 @@
       data.items.forEach(function(item) {
         var total = Number(item.total) || 0;
         var pct = Math.round((total / totalGeneral) * 1000) / 10;
-        var barWidth = Math.max(2, Math.min(100, pct));
+        var barWidth = Math.max(2, Math.min(100, (Math.log10(total + 1) / logMax) * 100));
         var tipos = item.tipos || {};
 
         html += '<div class="direccion-bar-row">';
