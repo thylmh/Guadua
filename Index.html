@@ -1316,6 +1316,8 @@
       google.script.run
         .withSuccessHandler(function(user) {
           document.getElementById("userEmail").textContent = user.email || "Desconocido";
+          var footerUser = document.getElementById("footerUserEmail");
+          if (footerUser) footerUser.textContent = user.email || "Desconocido";
         })
         .getLoggedUser();
       
@@ -1747,6 +1749,20 @@ function cerrarModalDetalleGlobal() {
 
     <!-- ========== VISTA INDIVIDUAL ========== -->
     <div id="vistaIndividual" style="display:none;">Individual</div>
+
+    <footer class="footerbar">
+      <div class="footer-cell footer-brand">
+        <span class="footer-logo" role="img" aria-label="Humboldt"></span>
+      </div>
+      <div class="footer-cell footer-title">
+        <div class="footer-title-text">Guadua</div>
+        <div class="footer-subtitle">Herramienta sustentada en bases sólidas que permite articular la planeación de la nómina del Instituto</div>
+      </div>
+      <div class="footer-cell footer-user">
+        <div class="footer-user-label">Usuario</div>
+        <div id="footerUserEmail" class="footer-user-value">—</div>
+      </div>
+    </footer>
   </div>
 
   <!-- ========== MODAL TRAMO ========== -->
