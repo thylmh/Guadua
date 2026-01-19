@@ -17,9 +17,8 @@ function getAllowedUsers_() {
   const p = PropertiesService.getScriptProperties();
   const raw = p.getProperty("ALLOWED_USERS") || "";
   if (!raw) {
-    // Fallback de seguridad: al menos el admin/desarrollador debe poder entrar si la propiedad está vacía
-    // Opcional: Retornar lista vacía si prefieres bloquear todo: return [];
-    return ["aplicaciones@humboldt.org.co"]; 
+    // Si la propiedad está vacía, no hay usuarios autorizados por defecto en el código
+    return []; 
   }
   return raw.split(",").map(e => e.trim()).filter(e => e !== "");
 }
@@ -426,6 +425,7 @@ function getCatalogoDim_(tableName, colId = "CODIGO", colNombre = "NOMBRE") {
 }
 
 function getCatalogosFinanciacion() {
+  checkAuth_(); // 🔒 SEGURIDAD
   const cacheKey = "CATALOGOS_FINANCIACION_V1";
   const cached = cacheGetJSON_(cacheKey);
   if (cached) return cached;
@@ -839,6 +839,7 @@ function getDashboardDireccionTotales() {
 
 function getMensualizadoGlobal() {
   try {
+    checkAuth_(); // 🔒 SEGURIDAD
     const cached = getMensualizadosGlobalCached_(600);
     return { ok: true, data: cached.mensualizados };
   } catch (e) {
@@ -850,6 +851,7 @@ function getMensualizadoGlobal() {
 
 function exportMensualizadoCSV() {
   try {
+    checkAuth_(); // 🔒 SEGURIDAD
     const { TABLES, COLS } = CONFIG;
 
     // 1) Traer todos los tramos
@@ -933,6 +935,7 @@ function exportMensualizadoCSV() {
 
 function getResumenMesGlobal(anioMes) {
   try {
+    checkAuth_(); // 🔒 SEGURIDAD
     if (!anioMes || String(anioMes).trim() === "") {
       return { ok: false, message: "Debe proporcionar un mes válido (yyyy-MM-01)." };
     }
