@@ -425,7 +425,7 @@ function getUserContext_() {
 
 function getCurrentUser_() {
   const context = getUserContext_();
-  return context.activeEmail || context.effectiveEmail || "Usuario Web Desconocido";
+  return context.activeEmail || "Usuario de sesión no disponible";
 }
 
 function getTimestamp_() {
@@ -498,13 +498,13 @@ function eliminarTramoFinanciacion(id) {
 
 function getLoggedUser() {
   const context = getUserContext_();
-  const usingEffective = !context.activeEmail && !!context.effectiveEmail;
+  const missingActive = !context.activeEmail;
   return {
     email: context.activeEmail || "",
     effectiveEmail: context.effectiveEmail || "",
-    usingEffective: usingEffective,
-    warning: usingEffective
-      ? "No se pudo obtener tu correo de sesión. Verifica el despliegue: Ejecutar como usuario que accede y acceso dentro del dominio."
+    usingEffective: !context.activeEmail && !!context.effectiveEmail,
+    warning: missingActive
+      ? "No se pudo obtener tu correo de sesión. Apps Script solo lo expone si el despliegue está en 'Ejecutar como: usuario que accede' y dentro del dominio. Por eso no se muestra el ejecutor."
       : ""
   };
 }
@@ -805,4 +805,3 @@ function getResumenMesGlobal(anioMes) {
     return { ok: false, message: "Error en getResumenMesGlobal: " + e.toString() };
   }
 }
-
