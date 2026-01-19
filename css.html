@@ -358,6 +358,105 @@
     letter-spacing: -0.3px; 
   }
 
+  .detail-card .sectionTitle {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.1px;
+    text-transform: uppercase;
+    color: var(--primary);
+  }
+
+  /* --- DETALLE DE EMPLEADO --- */
+  .detail-shell {
+    display: grid;
+    gap: 28px;
+  }
+
+  .detail-hero {
+    padding: 24px 28px;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(0, 77, 103, 0.08), rgba(0, 168, 150, 0.06));
+    border: 1px solid rgba(0, 77, 103, 0.12);
+    box-shadow: 0 12px 30px rgba(0, 77, 103, 0.1);
+  }
+
+  .detail-eyebrow {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+
+  .detail-name {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--primary-dark);
+    letter-spacing: -0.4px;
+  }
+
+  .detail-meta {
+    margin-top: 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .detail-meta-divider {
+    color: rgba(0, 77, 103, 0.35);
+    font-weight: 700;
+  }
+
+  .detail-section {
+    display: grid;
+    gap: 16px;
+  }
+
+  .detail-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--primary);
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(0, 77, 103, 0.12);
+  }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+  }
+
+  .detail-item {
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(0, 77, 103, 0.08);
+    border-radius: 14px;
+    padding: 16px 18px;
+    display: grid;
+    gap: 6px;
+    min-height: 80px;
+  }
+
+  .detail-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  .detail-value {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+    word-break: break-word;
+  }
+
   /* --- GRID KPI CARDS --- */
   .claude-grid { 
     display: grid; 
