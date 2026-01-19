@@ -52,25 +52,45 @@
   
   /* --- HEADER --- */
   .topbar { 
-    display: flex; 
-    justify-content: space-between; 
+    display: grid;
+    grid-template-columns: auto 1fr auto;
     align-items: center; 
+    column-gap: 24px;
     margin-bottom: 32px; 
     padding: 24px 32px; 
     background: var(--card); 
-    border: 1px solid var(--border); 
     border-radius: 20px; 
     box-shadow: var(--shadow-soft);
   }
-  
-  .title { 
+
+  .header-logo {
+    display: flex;
+    align-items: center;
+  }
+
+  .header-title {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .title-logo {
+    width: 120px;
+    height: 120px;
+    display: inline-block;
+    background-color: var(--primary);
+    mask: url("https://cdn.prod.website-files.com/64bea006689ebc2d5d9499ad/67ac933f9b2b1323a3e61073_30-humboldt-negro.svg") no-repeat center / contain;
+    -webkit-mask: url("https://cdn.prod.website-files.com/64bea006689ebc2d5d9499ad/67ac933f9b2b1323a3e61073_30-humboldt-negro.svg") no-repeat center / contain;
+    flex-shrink: 0;
+  }
+
+  .title-text {
     font-size: 28px; 
     font-weight: 600; 
+    letter-spacing: -0.5px; 
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    letter-spacing: -0.5px; 
   }
   
   .subtitle { 
@@ -94,6 +114,7 @@
     margin-top: 4px; 
     font-size: 15px; 
   }
+
 
   /* --- CARDS --- */
   .card { 
