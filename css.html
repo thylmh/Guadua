@@ -819,22 +819,23 @@
 
   .detalle-mes-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-    gap: 10px 16px;
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .detalle-mes-field {
     display: grid;
-    gap: 4px;
+    grid-template-columns: auto 1fr;
+    gap: 8px;
+    align-items: baseline;
     font-size: 13px;
   }
 
   .detalle-mes-field span {
     color: var(--text-muted);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    font-size: 11px;
+    font-weight: 600;
+    font-size: 12px;
+    white-space: nowrap;
   }
 
   .detalle-mes-field strong {
