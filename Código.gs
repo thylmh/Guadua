@@ -1,4 +1,3 @@
-
 /***** CONFIGURACIÓN *****/
 function getAppSheetConfig_() {
   const p = PropertiesService.getScriptProperties();
