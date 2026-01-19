@@ -1,13 +1,56 @@
-
 <!DOCTYPE html>
 <html>
+
 <head>
   <base target="_top">
   <title>Guadua - Planeación de Nómina</title>
   <?!= include('Css'); ?>
-  
+
   <script>
     // ==================== VARIABLES GLOBALES ====================
+    var USER_AUTHORIZED = false;
+
+    window.onload = function () {
+      // Ocultar todo al inicio
+      document.getElementById("paginaInicio").style.display = "none";
+      document.getElementById("seccionConsulta").style.display = "none";
+      document.getElementById("vistaGlobal").style.display = "none";
+
+      google.script.run
+        .withSuccessHandler(function (user) {
+          if (user && user.authorized) {
+            USER_AUTHORIZED = true;
+            // Usuario autorizado: Mostrar página de inicio normal
+            document.getElementById("paginaInicio").style.display = "block";
+
+            // Habilitar botones
+            var btns = document.querySelectorAll(".menu-card");
+            btns.forEach(function (btn) { btn.classList.remove("disabled"); });
+
+            // Opcional: Mostrar correo usuario
+            if (document.getElementById("userEmail")) {
+              document.getElementById("userEmail").textContent = user.email || "Desconocido";
+            }
+
+            // Cargar catálogos
+            asegurarCatalogos().then(function () {
+              poblarSelects();
+            });
+
+          } else {
+            // Usuario NO autorizado
+            USER_AUTHORIZED = false;
+            document.getElementById("paginaInicio").style.display = "none";
+            document.getElementById("vistaAccesoDenegado").style.display = "flex";
+            document.getElementById("msgDenegado").textContent = "No tienes permiso para acceder a esta aplicación (" + (user ? user.email : "Desconocido") + ").";
+          }
+        })
+        .withFailureHandler(function (err) {
+          alert("Error de conexión: " + err);
+        })
+        .getLoggedUser();
+    };
+
     var CATS = { proyectos: [], fuentes: [], componentes: [], subcomponentes: [], categorias: [], responsables: [] };
     var CATS_MAP = { proyectos: {}, fuentes: {}, componentes: {}, subcomponentes: {}, categorias: {}, responsables: {} };
     var TRAMO_EDITANDO = null;
@@ -16,60 +59,60 @@
     var CATALOGOS_CARGADOS = false;
     var DATOS_ACTUAL = null;
     var MENSUALIZADO_GLOBAL_CACHE = null;
-    
+
     // ==================== NAVEGACIÓN ====================
     function irAConsultaEmpleado() {
       document.getElementById("paginaInicio").style.display = "none";
       document.getElementById("seccionConsulta").style.display = "block";
       document.getElementById("vistaIndividual").style.display = "none";
       document.getElementById("vistaGlobal").style.display = "none";
-      setTimeout(function() { document.getElementById("cedula").focus(); }, 100);
+      setTimeout(function () { document.getElementById("cedula").focus(); }, 100);
     }
-    
+
     function irADashboardGlobal() {
       document.getElementById("paginaInicio").style.display = "none";
       document.getElementById("seccionConsulta").style.display = "none";
       document.getElementById("vistaGlobal").style.display = "block";
       document.getElementById("vistaIndividual").style.display = "none";
     }
-    
 
 
-  function volverAlInicio() {
-    document.getElementById("paginaInicio").style.display = "block";
-    document.getElementById("seccionConsulta").style.display = "none";
-    document.getElementById("vistaGlobal").style.display = "none";
-    document.getElementById("vistaIndividual").style.display = "none";
-    document.getElementById("vistaMensualizadaGlobal").style.display = "none"; // <-- FALTABA
-    var tn = document.getElementById("tabNavigation");
-    if (tn) tn.style.display = "none";
-    document.getElementById("cedula").value = "";
-    var vd = document.getElementById("vistaDetallada");
-    if (vd) vd.style.display = "block";
-}
 
-    
+    function volverAlInicio() {
+      document.getElementById("paginaInicio").style.display = "block";
+      document.getElementById("seccionConsulta").style.display = "none";
+      document.getElementById("vistaGlobal").style.display = "none";
+      document.getElementById("vistaIndividual").style.display = "none";
+      document.getElementById("vistaMensualizadaGlobal").style.display = "none"; // <-- FALTABA
+      var tn = document.getElementById("tabNavigation");
+      if (tn) tn.style.display = "none";
+      document.getElementById("cedula").value = "";
+      var vd = document.getElementById("vistaDetallada");
+      if (vd) vd.style.display = "block";
+    }
+
+
     // ==================== HELPERS ====================
-    function setMsg(text, kind) { 
-      var el = document.getElementById("msg"); 
-      el.textContent = text || ""; 
-      el.className = "msg " + (kind || ""); 
+    function setMsg(text, kind) {
+      var el = document.getElementById("msg");
+      el.textContent = text || "";
+      el.className = "msg " + (kind || "");
     }
-    
-    function setMsgContrato(text, kind) { 
-      var el = document.getElementById("msgContrato"); 
-      if (!el) return; 
-      el.textContent = text || ""; 
-      el.className = "msg " + (kind || ""); 
+
+    function setMsgContrato(text, kind) {
+      var el = document.getElementById("msgContrato");
+      if (!el) return;
+      el.textContent = text || "";
+      el.className = "msg " + (kind || "");
     }
-    
+
     function clearTables() {
       var t1 = document.querySelector("#tblTramos tbody");
       var t2 = document.querySelector("#tblMeses tbody");
       if (t1) t1.replaceChildren();
       if (t2) t2.replaceChildren();
     }
-    
+
     function showSections(show) {
       document.getElementById("tabNavigation").style.display = show ? "" : "none";
       document.getElementById("secEmpleado").style.display = show ? "" : "none";
@@ -77,55 +120,55 @@
       document.getElementById("secMensual").style.display = show ? "" : "none";
       document.getElementById("secResumen").style.display = show ? "" : "none";
     }
-    
+
     function escapeHtml(s) {
-      return String(s || "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
-    
+
     function money(n) {
       if (n == null || n === "") return "—";
       var x = Number(n);
-      return isNaN(x) ? String(n) : x.toLocaleString("es-CO", {style:'currency',currency:'COP',maximumFractionDigits:0});
+      return isNaN(x) ? String(n) : x.toLocaleString("es-CO", { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
     }
 
     function maskMoney() {
       return "******";
     }
-    
+
     function moneyCompact(n) {
       if (n == null || n === "") return "—";
       var x = Number(n);
       if (isNaN(x)) return String(n);
-      
+
       if (x >= 1000000) {
         return "$" + (x / 1000000).toFixed(1) + "M";
       }
-      return x.toLocaleString("es-CO", {style:'currency',currency:'COP',maximumFractionDigits:0});
+      return x.toLocaleString("es-CO", { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
     }
-    
+
     function formatDate(value) {
       if (!value) return "—";
       var s = String(value).trim();
       var m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
       if (m) {
         var dt = new Date(Date.UTC(Number(m[3]), Number(m[1]) - 1, Number(m[2])));
-        var day = String(dt.getUTCDate()).padStart(2,'0');
-        var month = String(dt.getUTCMonth()+1).padStart(2,'0');
+        var day = String(dt.getUTCDate()).padStart(2, '0');
+        var month = String(dt.getUTCMonth() + 1).padStart(2, '0');
         return day + "/" + month + "/" + dt.getUTCFullYear();
       }
       return s;
     }
-    
+
     function formatMes(value) {
       if (!value) return "—";
       var s = String(value).trim();
       var m = s.match(/^(\d{4})-(\d{2})/);
       if (!m) return s;
       var dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1));
-      var mes = new Intl.DateTimeFormat("es-CO", {month:"long",timeZone:"UTC"}).format(dt);
+      var mes = new Intl.DateTimeFormat("es-CO", { month: "long", timeZone: "UTC" }).format(dt);
       return m[1] + " " + mes.charAt(0).toUpperCase() + mes.slice(1);
     }
-    
+
     function getName(listName, id) {
       if (!id) return "—";
       var map = CATS_MAP[listName] || {};
@@ -135,7 +178,7 @@
 
     function buildCatMap(list) {
       var map = {};
-      (list || []).forEach(function(item) {
+      (list || []).forEach(function (item) {
         if (item && item.id != null) {
           map[String(item.id)] = String(item.nombre || "");
         }
@@ -175,12 +218,12 @@
           ts: Date.now(),
           data: data || {}
         }));
-      } catch (e) {}
+      } catch (e) { }
     }
-    
+
     // ==================== CATÁLOGOS ====================
     function asegurarCatalogos() {
-      return new Promise(function(resolve) {
+      return new Promise(function (resolve) {
         if (CATALOGOS_CARGADOS) {
           resolve(true);
           return;
@@ -195,13 +238,13 @@
         }
 
         google.script.run
-          .withSuccessHandler(function(data) {
+          .withSuccessHandler(function (data) {
             hydrateCatalogs(data);
             setCatalogCache_(data);
             CATALOGOS_CARGADOS = true;
             resolve(data);
           })
-          .withFailureHandler(function(err) {
+          .withFailureHandler(function (err) {
             console.warn("Error cargando catálogos:", err);
             CATALOGOS_CARGADOS = true;
             resolve(CATS);
@@ -209,111 +252,111 @@
           .getCatalogosFinanciacion();
       });
     }
-    
+
     // ==================== BÚSQUEDA DE EMPLEADO ====================
     function buscar() {
       console.log("🔍 Buscar llamado");
       setMsg(""); setMsgContrato(""); clearTables(); showSections(false);
       var cedula = document.getElementById("cedula").value.trim();
       if (!cedula) { setMsg("Ingresa una cédula.", "warn"); return; }
-      
+
       var btn = document.getElementById("btnBuscar");
       btn.disabled = true;
       btn.textContent = "Consultando...";
-      
+
       function ejecutarConsulta() {
         google.script.run
-          .withSuccessHandler(function(res) {
+          .withSuccessHandler(function (res) {
             btn.disabled = false;
             btn.textContent = "🔍 Buscar";
             if (!res || !res.ok) { setMsg(res?.message || "Error", "warn"); return; }
-            
+
             DATOS_ACTUAL = res;
             document.getElementById("tabNavigation").style.display = "block";
             showSections(true);
-            
+
             renderEmpleadoSimple(res.empleado, res.cabecera);
             renderTramos(res.tramos);
             renderMensual(res.months);
             renderResumen(res);
-            
+
             setMsg("✅ Datos cargados: " + res.tramos.length + " tramo(s)", "ok");
             console.log("✅ Búsqueda exitosa");
           })
-          .withFailureHandler(function(err) {
+          .withFailureHandler(function (err) {
             btn.disabled = false;
             btn.textContent = "🔍 Buscar";
             setMsg("Error: " + err, "err");
           })
-          .getVistaFinanciacion({cedula: cedula});
+          .getVistaFinanciacion({ cedula: cedula });
       }
 
       asegurarCatalogos()
         .then(ejecutarConsulta)
-        .catch(function(e) {
+        .catch(function (e) {
           console.warn("Catálogos no disponibles, continuando sin ellos:", e);
           ejecutarConsulta();
         });
     }
-    
+
     function renderEmpleadoSimple(emp, con) {
       var box = document.getElementById("kpiBox");
       if (!box) return;
-      
+
       box.innerHTML = "";
       if (!emp) return;
-      
+
       if (!con) {
         setMsgContrato("No hay contrato activo.", "warn");
         return;
       }
-      
+
       // 🎨 NOMBRE COMO BANNER DESTACADO
       var html = '<div style="background:linear-gradient(135deg,rgba(0,77,103,0.08) 0%,rgba(0,168,150,0.08) 100%);border-left:4px solid var(--primary);border-radius:12px;padding:20px 24px;margin-bottom:36px;backdrop-filter:blur(10px);box-shadow:0 4px 12px rgba(0,77,103,0.08);">';
       html += '<div style="font-size:13px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Trabajador</div>';
       html += '<div style="font-size:26px;font-weight:600;color:var(--primary-dark);letter-spacing:-0.4px;">' + escapeHtml(emp.nombre || "Sin nombre") + '</div>';
       html += '</div>';
-      
+
       // 📍 SECCIÓN: CENTRO DE COSTOS
       html += '<div style="margin-bottom:32px;">';
       html += '<div style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:16px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--border);padding-bottom:8px;">📍 Centro de Costos</div>';
       html += '<div class="claude-grid">';
-      
+
       var camposCentro = [
-        {label:"DIRECCIÓN", valor:con.DIRECCION}
+        { label: "DIRECCIÓN", valor: con.DIRECCION }
       ];
-      if (con.GERENCIA) camposCentro.push({label:"GERENCIA", valor:con.GERENCIA});
-      if (con.AREA) camposCentro.push({label:"ÁREA", valor:con.AREA});
-      if (con.SUBAREA) camposCentro.push({label:"SUBÁREA", valor:con.SUBAREA});
-      
-      camposCentro.forEach(function(c) {
+      if (con.GERENCIA) camposCentro.push({ label: "GERENCIA", valor: con.GERENCIA });
+      if (con.AREA) camposCentro.push({ label: "ÁREA", valor: con.AREA });
+      if (con.SUBAREA) camposCentro.push({ label: "SUBÁREA", valor: con.SUBAREA });
+
+      camposCentro.forEach(function (c) {
         html += '<div class="claude-card">';
         html += '<div class="claude-label">' + c.label + '</div>';
         html += '<div class="claude-value">' + escapeHtml(c.valor || "---") + '</div>';
         html += '</div>';
       });
       html += '</div></div>';
-      
+
       // 📄 SECCIÓN: INFORMACIÓN DEL CONTRATO
       html += '<div style="margin-bottom:32px;">';
       html += '<div style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:16px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--border);padding-bottom:8px;">📄 Información del Contrato</div>';
       html += '<div class="claude-grid">';
-      
+
       var camposContrato = [
-        {label:"ID CONTRATO", valor:con.IDCONTRATO},
-        {label:"POSICIÓN", valor:con.POSICION},
-        {label:"PLANTA", valor:con.PLANTA},
-        {label:"TIPO DE PLANTA", valor:con.TPLANTA},
-        {label:"CARGO", valor:con.CARGO},
-        {label:"ROL", valor:con.ROL},
-        {label:"BANDA", valor:con.BANDA},
-        {label:"N° CONTRATO", valor:con.NUM_CONTRATO},
-        {label:"F. CONTRATO", valor:con.F_CONTRATO, tipo:"fecha"},
-        {label:"F. TERMINACIÓN", valor:con.F_TERMINACION, tipo:"fecha"},
-        {label:"PRÓRROGAS", valor:con.PRORROGAS}
+        { label: "ID CONTRATO", valor: con.IDCONTRATO },
+        { label: "POSICIÓN", valor: con.POSICION },
+        { label: "PLANTA", valor: con.PLANTA },
+        { label: "TIPO DE PLANTA", valor: con.TPLANTA },
+        { label: "CARGO", valor: con.CARGO },
+        { label: "ROL", valor: con.ROL },
+        { label: "BANDA", valor: con.BANDA },
+        { label: "N° CONTRATO", valor: con.NUM_CONTRATO },
+        { label: "F. CONTRATO", valor: con.F_CONTRATO, tipo: "fecha" },
+        { label: "F. TERMINACIÓN", valor: con.F_TERMINACION, tipo: "fecha" },
+        { label: "PRÓRROGAS", valor: con.PRORROGAS }
       ];
-      
-      camposContrato.forEach(function(c) {
+
+      camposContrato.forEach(function (c) {
         var display = c.valor || "---";
         if (c.valor && c.tipo === "fecha") {
           display = formatDate(c.valor);
@@ -324,19 +367,19 @@
         html += '</div>';
       });
       html += '</div></div>';
-      
+
       // 💰 SECCIÓN: CARGA SALARIAL
       html += '<div style="margin-bottom:32px;">';
       html += '<div style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:16px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--border);padding-bottom:8px;">💰 Carga Salarial</div>';
       html += '<div class="claude-grid">';
-      
+
       var camposSalarial = [
-        {label:"SALARIO", valor:con.SALARIO, tipo:"moneda"},
-        {label:"NIVEL RIESGO", valor:con.NIVEL_RIESGO},
-        {label:"ATEP", valor:con.ATEP, tipo:"porcentaje"}
+        { label: "SALARIO", valor: con.SALARIO, tipo: "moneda" },
+        { label: "NIVEL RIESGO", valor: con.NIVEL_RIESGO },
+        { label: "ATEP", valor: con.ATEP, tipo: "porcentaje" }
       ];
-      
-      camposSalarial.forEach(function(c) {
+
+      camposSalarial.forEach(function (c) {
         var display = c.valor || "---";
         if (c.valor) {
           if (c.tipo === "moneda") {
@@ -355,22 +398,22 @@
         html += '</div>';
       });
       html += '</div></div>';
-      
+
       box.innerHTML = html;
     }
-    
+
     function renderTramos(tramos) {
       var tbody = document.querySelector("#tblTramos tbody");
       if (!tbody) return;
       tbody.replaceChildren();
-      
+
       if (!tramos || tramos.length === 0) {
         tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:var(--text-muted);">No hay tramos registrados</td></tr>';
         return;
       }
 
       var frag = document.createDocumentFragment();
-      tramos.forEach(function(t) {
+      tramos.forEach(function (t) {
         var tr = document.createElement("tr");
         tr.innerHTML =
           '<td>' + escapeHtml(t.id) + '</td>' +
@@ -383,26 +426,26 @@
           '<td>' + escapeHtml(getName('componentes', t.componente)) + '</td>' +
           '<td>' + escapeHtml(getName('responsables', t.responsable)) + '</td>' +
           '<td style="text-align:center;">' +
-            '<button class="btn-circle edit" onclick="editarTramo(\'' + t.id + '\')">✏️</button>' +
-            '<button class="btn-circle delete" onclick="confirmarEliminar(\'' + t.id + '\')">🗑️</button>' +
+          '<button class="btn-circle edit" onclick="editarTramo(\'' + t.id + '\')">✏️</button>' +
+          '<button class="btn-circle delete" onclick="confirmarEliminar(\'' + t.id + '\')">🗑️</button>' +
           '</td>';
         frag.appendChild(tr);
       });
       tbody.appendChild(frag);
     }
-    
+
     function renderMensual(meses) {
       var tbody = document.querySelector("#tblMeses tbody");
       if (!tbody) return;
       tbody.replaceChildren();
-      
+
       if (!meses || meses.length === 0) {
         tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;color:var(--text-muted);">No hay datos mensualizados</td></tr>';
         return;
       }
 
       var frag = document.createDocumentFragment();
-      meses.forEach(function(m) {
+      meses.forEach(function (m) {
         var tr = document.createElement("tr");
         tr.innerHTML =
           '<td>' + formatMes(m.anioMes) + '</td>' +
@@ -412,25 +455,25 @@
       });
       tbody.appendChild(frag);
     }
-    
+
     function renderResumen(datos) {
       var box = document.getElementById("resumenBox");
       if (!box) return;
-      
+
       if (!datos || !datos.months || datos.months.length === 0) {
         box.innerHTML = '<div class="msg warn">No hay datos para mostrar resumen</div>';
         return;
       }
-      
+
       // Agrupar por proyecto
       var proyectos = {};
       var totalGeneral = 0;
-      
-      datos.months.forEach(function(mes) {
-        mes.detalle.forEach(function(d) {
+
+      datos.months.forEach(function (mes) {
+        mes.detalle.forEach(function (d) {
           var proyId = d.proyecto;
           var proyNombre = getName('proyectos', proyId);
-          
+
           if (!proyectos[proyId]) {
             proyectos[proyId] = {
               id: proyId,
@@ -442,42 +485,42 @@
               responsables: new Set()
             };
           }
-          
+
           proyectos[proyId].totalCalculado += (d.valor || 0);
           proyectos[proyId].meses.add(mes.anioMes);
           if (d.fuente) proyectos[proyId].fuentes.add(d.fuente);
           if (d.componente) proyectos[proyId].componentes.add(d.componente);
           if (d.responsable) proyectos[proyId].responsables.add(d.responsable);
-          
+
           totalGeneral += (d.valor || 0);
         });
       });
-      
+
       // Convertir a array y ordenar
-      var proyectosArray = Object.values(proyectos).sort(function(a, b) {
+      var proyectosArray = Object.values(proyectos).sort(function (a, b) {
         return b.totalCalculado - a.totalCalculado;
       });
-      
+
       // Generar HTML
       var html = '<div style="margin-bottom:24px;padding:16px;background:rgba(0,77,103,0.05);border-radius:12px;border-left:4px solid var(--primary);">';
       html += '<div style="font-size:13px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px;">Total General Mensualizado</div>';
       html += '<div style="font-size:32px;font-weight:700;color:var(--primary);">' + money(totalGeneral) + '</div>';
       html += '</div>';
-      
+
       html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;">';
-      
-      proyectosArray.forEach(function(proyecto) {
+
+      proyectosArray.forEach(function (proyecto) {
         var porcentaje = totalGeneral > 0 ? ((proyecto.totalCalculado / totalGeneral) * 100).toFixed(1) : 0;
-        
+
         html += '<div class="resumen-card">';
         html += '<div class="resumen-header">';
         html += '<div class="resumen-proyecto-nombre">' + escapeHtml(proyecto.nombre) + '</div>';
         html += '<div class="resumen-porcentaje">' + porcentaje + '%</div>';
         html += '</div>';
-        
+
         html += '<div class="resumen-total">' + money(proyecto.totalCalculado) + '</div>';
         html += '<div class="resumen-subtotal">Total Mensualizado (Base 30)</div>';
-        
+
         html += '<div class="resumen-detalles">';
         html += '<div class="resumen-item">';
         html += '<span class="resumen-label">📅 Meses:</span>';
@@ -496,36 +539,36 @@
         html += '<span class="resumen-valor">' + proyecto.responsables.size + '</span>';
         html += '</div>';
         html += '</div>';
-        
+
         html += '<div class="resumen-barra">';
         html += '<div class="resumen-barra-fill" style="width:' + porcentaje + '%"></div>';
         html += '</div>';
         html += '</div>';
       });
-      
+
       html += '</div>';
       box.innerHTML = html;
     }
-    
+
     // ==================== DASHBOARD GLOBAL ====================
     function cargarDashboardGlobal() {
       console.log("🌍 Cargar Dashboard Global");
       var container = document.getElementById("dashGlobalContent");
       var msgDiv = document.getElementById("msgGlobal");
       var btnCargar = event.target;
-      
+
       msgDiv.innerHTML = "⏳ Cargando datos de toda la organización...";
       msgDiv.className = "msg";
       msgDiv.style.display = "block";
       btnCargar.disabled = true;
       btnCargar.textContent = "Cargando...";
       container.innerHTML = "";
-      
+
       google.script.run
-        .withSuccessHandler(function(res) {
+        .withSuccessHandler(function (res) {
           btnCargar.disabled = false;
           btnCargar.textContent = "🔄 Recargar Dashboard Global";
-          
+
           if (res && res.ok) {
             generarDashboardGlobal(res.data);
             msgDiv.style.display = "none";
@@ -534,7 +577,7 @@
             msgDiv.className = "msg err";
           }
         })
-        .withFailureHandler(function(err) {
+        .withFailureHandler(function (err) {
           btnCargar.disabled = false;
           btnCargar.textContent = "📊 Cargar Dashboard Global";
           msgDiv.innerHTML = "❌ Error: " + err;
@@ -542,38 +585,38 @@
         })
         .getDashboardGlobal();
     }
-    
+
     function generarDashboardGlobal(data) {
       var container = document.getElementById("dashGlobalContent");
-      
+
       if (!data || !data.proyectosPorMes) {
         container.innerHTML = "<div class='msg warn'>No hay datos disponibles</div>";
         return;
       }
-      
+
       var proyectosPorMes = data.proyectosPorMes;
       var totales = data.totales;
       var proyectos = data.proyectos;
-      
+
       // KPIs
       var html = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-bottom:32px;">';
-      
+
       html += '<div class="kpi-card"><div class="kpi-icon">💰</div><div class="kpi-label">Total Nómina</div>';
       html += '<div class="kpi-value">' + money(totales.totalGeneral) + '</div>';
       html += '<div class="kpi-desc">Inversión total mensualizada</div></div>';
-      
+
       html += '<div class="kpi-card"><div class="kpi-icon">👥</div><div class="kpi-label">Empleados</div>';
       html += '<div class="kpi-value">' + totales.cantidadEmpleados + '</div>';
       html += '<div class="kpi-desc">Personal activo</div></div>';
-      
+
       html += '<div class="kpi-card"><div class="kpi-icon">🎯</div><div class="kpi-label">Proyectos</div>';
       html += '<div class="kpi-value">' + proyectos.length + '</div>';
       html += '<div class="kpi-desc">Proyectos únicos</div></div>';
-      
+
       html += '<div class="kpi-card"><div class="kpi-icon">📅</div><div class="kpi-label">Período</div>';
       html += '<div class="kpi-value">' + totales.meses + '</div>';
       html += '<div class="kpi-desc">Meses analizados</div></div>';
-      
+
       html += '</div>';
 
       // ==================== GRAFICA POR DIRECCIÓN ====================
@@ -581,47 +624,47 @@
       html += '<div style="font-size:16px;font-weight:600;color:var(--primary-dark);margin-bottom:12px;">🏢 Total por Dirección</div>';
       html += '<div id="direccionTotalesContainer" class="msg">⏳ Cargando totales por dirección...</div>';
       html += '</div>';
-      
+
       // Tabla Consolidada Proyecto vs Mes
       html += '<div style="margin-top:32px;margin-bottom:48px;">';
       html += '<div style="font-size:16px;font-weight:600;color:var(--primary-dark);margin-bottom:16px;">📊 Consolidado por Proyecto vs Mes-Año</div>';
       html += '<div class="tableWrap"><table class="tabla-compacta"><thead><tr>';
       html += '<th style="position:sticky;left:0;background:#F8FAFB;z-index:10;min-width:200px;font-size:11px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">Proyecto</th>';
-      
+
       // Obtener meses
       var primerProyecto = proyectos[0];
       var meses = Object.keys(proyectosPorMes[primerProyecto] || {}).sort();
-      
+
       for (var i = 0; i < meses.length; i++) {
         html += '<th style="min-width:110px;font-size:10px;">' + formatMes(meses[i]) + '</th>';
       }
       html += '<th style="min-width:130px;background:rgba(0,77,103,0.05);font-weight:700;font-size:11px;">Total</th>';
       html += '</tr></thead><tbody>';
-      
+
       // Filas por proyecto
       for (var p = 0; p < proyectos.length; p++) {
         var proyecto = proyectos[p];
         var datosProyecto = proyectosPorMes[proyecto];
         var totalProyecto = 0;
-        
+
         html += '<tr>';
         html += '<td style="position:sticky;left:0;background:#FFFFFF;font-weight:600;z-index:5;font-size:11px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">' + escapeHtml(proyecto) + '</td>';
-        
+
         for (var m = 0; m < meses.length; m++) {
           var mes = meses[m];
           var valor = datosProyecto[mes] || 0;
           totalProyecto += valor;
           html += '<td class="num" style="font-size:11px;">' + moneyCompact(valor) + '</td>';
         }
-        
+
         html += '<td class="num" style="font-weight:700;background:rgba(0,77,103,0.05);color:var(--primary);font-size:12px;">' + moneyCompact(totalProyecto) + '</td>';
         html += '</tr>';
       }
-      
+
       // Fila de totales
       html += '<tr style="background:rgba(0,77,103,0.08);font-weight:700;">';
       html += '<td style="position:sticky;left:0;background:rgba(0,77,103,0.12);z-index:5;font-size:11px;box-shadow:2px 0 4px rgba(0,0,0,0.05);">TOTAL</td>';
-      
+
       for (var m = 0; m < meses.length; m++) {
         var mes = meses[m];
         var totalMes = 0;
@@ -630,18 +673,18 @@
         }
         html += '<td class="num" style="color:var(--primary);font-size:11px;">' + moneyCompact(totalMes) + '</td>';
       }
-      
+
       html += '<td class="num" style="font-size:13px;color:var(--primary);">' + moneyCompact(totales.totalGeneral) + '</td>';
       html += '</tr>';
-      
+
       html += '</tbody></table></div></div>';
-      
+
       // ==================== DETALLE POR PROYECTO (BAJO DEMANDA) ====================
       html += '<div style="margin-top:48px;">';
       html += '<div style="font-size:18px;font-weight:700;color:var(--primary-dark);margin-bottom:20px;padding-bottom:12px;border-bottom:3px solid var(--primary);">👥 Detalle por Proyecto: Empleado vs Mes-Año</div>';
       html += '<div class="row" style="margin-bottom:16px;">';
       html += '<div class="field"><label>Proyecto</label><select id="selectProyectoDetalle">';
-      proyectos.forEach(function(p) {
+      proyectos.forEach(function (p) {
         html += '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>';
       });
       html += '</select></div>';
@@ -658,7 +701,7 @@
       html += '</div>';
       html += '<div id="empleadosGlobalContainer" class="msg warn">Haz clic en "Cargar tabla" para ver el detalle.</div>';
       html += '</div>';
-      
+
       container.innerHTML = html;
       cargarTotalesPorDireccion();
     }
@@ -673,14 +716,14 @@
       container.innerHTML = "⏳ Cargando detalle del proyecto...";
 
       google.script.run
-        .withSuccessHandler(function(res) {
+        .withSuccessHandler(function (res) {
           if (!res || !res.ok) {
             container.innerHTML = "<div class='msg err'>❌ Error: " + (res?.message || "Sin datos") + "</div>";
             return;
           }
           renderDetalleProyectoGlobal(res.data);
         })
-        .withFailureHandler(function(err) {
+        .withFailureHandler(function (err) {
           container.innerHTML = "<div class='msg err'>❌ Error: " + err + "</div>";
         })
         .getDashboardDetalleProyecto({ proyecto: proyecto });
@@ -705,10 +748,10 @@
       var html = '';
       html += '<div style="margin-bottom:16px;background:rgba(255,255,255,0.5);border-radius:16px;padding:24px;border:1px solid rgba(0,77,103,0.12);">';
       var totalProyecto = 0;
-      nombresEmpleados.forEach(function(nombreEmpleado) {
+      nombresEmpleados.forEach(function (nombreEmpleado) {
         var datosEmpleado = empleados[nombreEmpleado];
         if (!datosEmpleado || !datosEmpleado.meses) return;
-        Object.keys(datosEmpleado.meses).forEach(function(mes) {
+        Object.keys(datosEmpleado.meses).forEach(function (mes) {
           totalProyecto += Number(datosEmpleado.meses[mes]) || 0;
         });
       });
@@ -727,7 +770,7 @@
       html += '<th style="min-width:120px;background:rgba(0,77,103,0.05);font-weight:700;font-size:10px;">Total</th>';
       html += '</tr></thead><tbody>';
 
-      nombresEmpleados.forEach(function(nombreEmpleado) {
+      nombresEmpleados.forEach(function (nombreEmpleado) {
         var datosEmpleado = empleados[nombreEmpleado];
         var totalEmpleado = 0;
         html += '<tr>';
@@ -758,14 +801,14 @@
       container.innerHTML = "⏳ Cargando empleados globales...";
 
       google.script.run
-        .withSuccessHandler(function(res) {
+        .withSuccessHandler(function (res) {
           if (!res || !res.ok) {
             container.innerHTML = "<div class='msg err'>❌ Error: " + (res?.message || "Sin datos") + "</div>";
             return;
           }
           renderEmpleadosGlobal(res.data);
         })
-        .withFailureHandler(function(err) {
+        .withFailureHandler(function (err) {
           container.innerHTML = "<div class='msg err'>❌ Error: " + err + "</div>";
         })
         .getDashboardEmpleadosGlobal();
@@ -785,18 +828,21 @@
       // Panel de Filtros
       var direccionesSet = new Set();
       var gerenciasSet = new Set();
+      var tiposPlantaSet = new Set();
       var prorrogasSet = new Set();
 
-      nombresEmpleadosTodos.forEach(function(nombreEmpleado) {
+      nombresEmpleadosTodos.forEach(function (nombreEmpleado) {
         var emp = empleados[nombreEmpleado];
         if (emp.direccion) direccionesSet.add(emp.direccion);
         if (emp.gerencia) gerenciasSet.add(emp.gerencia);
+        if (emp.tplanta) tiposPlantaSet.add(emp.tplanta);
         if (emp.prorrogas !== undefined && emp.prorrogas !== null) prorrogasSet.add(emp.prorrogas);
       });
 
       var direcciones = Array.from(direccionesSet).sort();
       var gerencias = Array.from(gerenciasSet).sort();
-      var prorrogasUnicas = Array.from(prorrogasSet).sort(function(a, b) { return a - b; });
+      var tiposPlanta = Array.from(tiposPlantaSet).sort();
+      var prorrogasUnicas = Array.from(prorrogasSet).sort(function (a, b) { return a - b; });
 
       var html = '';
       html += '<div style="background:rgba(255,255,255,0.7);border:1px solid rgba(0,77,103,0.12);border-radius:12px;padding:20px;margin-bottom:20px;">';
@@ -806,7 +852,7 @@
       html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">🏢 Dirección</label>';
       html += '<select id="filtroDireccion" onchange="aplicarFiltrosEmpleados()">';
       html += '<option value="">Todas</option>';
-      direcciones.forEach(function(d) {
+      direcciones.forEach(function (d) {
         html += '<option value="' + escapeHtml(d) + '">' + escapeHtml(d) + '</option>';
       });
       html += '</select></div>';
@@ -815,8 +861,17 @@
       html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">👔 Gerencia</label>';
       html += '<select id="filtroGerencia" onchange="aplicarFiltrosEmpleados()">';
       html += '<option value="">Todas</option>';
-      gerencias.forEach(function(g) {
+      gerencias.forEach(function (g) {
         html += '<option value="' + escapeHtml(g) + '">' + escapeHtml(g) + '</option>';
+      });
+      html += '</select></div>';
+
+      html += '<div class="field">';
+      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">🏷️ Tipo de planta</label>';
+      html += '<select id="filtroTipoPlanta" onchange="aplicarFiltrosEmpleados()">';
+      html += '<option value="">Todas</option>';
+      tiposPlanta.forEach(function (t) {
+        html += '<option value="' + escapeHtml(t) + '">' + escapeHtml(t) + '</option>';
       });
       html += '</select></div>';
 
@@ -849,7 +904,7 @@
       html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">📝 Prórrogas</label>';
       html += '<select id="filtroProrrogas" onchange="aplicarFiltrosEmpleados()">';
       html += '<option value="">Todas</option>';
-      prorrogasUnicas.forEach(function(p) {
+      prorrogasUnicas.forEach(function (p) {
         html += '<option value="' + p + '">' + p + '</option>';
       });
       html += '</select></div>';
@@ -876,7 +931,7 @@
       html += '<th style="min-width:110px;background:rgba(0,77,103,0.05);font-weight:700;font-size:10px;">Total</th>';
       html += '</tr></thead><tbody id="tbodyEmpleadosGlobal">';
 
-      nombresEmpleadosTodos.forEach(function(nombreEmpleado) {
+      nombresEmpleadosTodos.forEach(function (nombreEmpleado) {
         var datosEmpleado = empleados[nombreEmpleado];
         var totalEmpleado = 0;
         var proyectosStr = (datosEmpleado.proyectos || []).join(', ');
@@ -887,6 +942,7 @@
         html += 'data-proyectos="' + escapeHtml(proyectosStr).toLowerCase() + '" ';
         html += 'data-direccion="' + escapeHtml(datosEmpleado.direccion).toLowerCase() + '" ';
         html += 'data-gerencia="' + escapeHtml(datosEmpleado.gerencia).toLowerCase() + '" ';
+        html += 'data-tplanta="' + escapeHtml(datosEmpleado.tplanta || "").toLowerCase() + '" ';
         html += 'data-fterminacion="' + (datosEmpleado.fTerminacion || "") + '" ';
         html += 'data-prorrogas="' + (datosEmpleado.prorrogas || 0) + '">';
 
@@ -920,7 +976,7 @@
       for (var m = 0; m < meses.length; m++) {
         var mes = meses[m];
         var totalMes = 0;
-        nombresEmpleadosTodos.forEach(function(nombreEmpleado) {
+        nombresEmpleadosTodos.forEach(function (nombreEmpleado) {
           totalMes += (empleados[nombreEmpleado].meses && empleados[nombreEmpleado].meses[mes]) ? empleados[nombreEmpleado].meses[mes] : 0;
         });
         granTotal += totalMes;
@@ -940,14 +996,14 @@
       container.innerHTML = "⏳ Cargando totales por dirección...";
 
       google.script.run
-        .withSuccessHandler(function(res) {
+        .withSuccessHandler(function (res) {
           if (!res || !res.ok) {
             container.innerHTML = "<div class='msg err'>❌ Error: " + (res?.message || "Sin datos") + "</div>";
             return;
           }
           renderTotalesPorDireccion(res.data);
         })
-        .withFailureHandler(function(err) {
+        .withFailureHandler(function (err) {
           container.innerHTML = "<div class='msg err'>❌ Error: " + err + "</div>";
         })
         .getDashboardDireccionTotales();
@@ -966,90 +1022,145 @@
         return;
       }
 
-      var html = '<div style="display:grid;gap:12px;">';
-      data.items.forEach(function(item) {
+      var palette = ["#004D67", "#00A896", "#05668D", "#20A4F3", "#F4A261", "#E76F51", "#2A9D8F", "#8E9AAF"];
+      var tiposSet = new Set();
+      data.items.forEach(function (item) {
+        var tipos = item.tipos || {};
+        Object.keys(tipos).forEach(function (tipo) {
+          if (tipo) tiposSet.add(tipo);
+        });
+      });
+      var tiposLista = Array.from(tiposSet).sort();
+
+      var maxTotal = 0;
+      data.items.forEach(function (item) {
+        var total = Number(item.total) || 0;
+        if (total > maxTotal) maxTotal = total;
+      });
+      var logMax = Math.log10(maxTotal + 1) || 1;
+
+      var html = '<div class="direccion-chart">';
+      if (tiposLista.length) {
+        html += '<div class="direccion-legend">';
+        tiposLista.forEach(function (tipo, idx) {
+          var color = palette[idx % palette.length];
+          html += '<div class="direccion-legend-item">';
+          html += '<span class="direccion-dot" style="background:' + color + ';"></span>';
+          html += '<span>' + escapeHtml(tipo) + '</span>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      html += '<div class="direccion-bars">';
+      data.items.forEach(function (item) {
         var total = Number(item.total) || 0;
         var pct = Math.round((total / totalGeneral) * 1000) / 10;
-        var barWidth = Math.max(2, Math.min(100, pct));
-        html += '<div style="display:grid;gap:6px;">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--text-muted);">';
+        var barWidth = Math.max(2, Math.min(100, (Math.log10(total + 1) / logMax) * 100));
+        var tipos = item.tipos || {};
+
+        html += '<div class="direccion-bar-row">';
+        html += '<div class="direccion-bar-header">';
         html += '<span>' + escapeHtml(item.direccion) + '</span>';
         html += '<span>' + moneyCompact(total) + ' · ' + pct.toFixed(1) + '%</span>';
         html += '</div>';
-        html += '<div style="height:8px;background:rgba(0,77,103,0.08);border-radius:8px;overflow:hidden;">';
-        html += '<div style="height:100%;width:' + barWidth + '%;background:linear-gradient(135deg,var(--primary) 0%,var(--accent) 100%);"></div>';
+        html += '<div class="direccion-bar-track">';
+        html += '<div class="direccion-bar" style="width:' + barWidth + '%;">';
+
+        if (tiposLista.length) {
+          var totalLocal = total || 1;
+          tiposLista.forEach(function (tipo, idx) {
+            var valor = Number(tipos[tipo]) || 0;
+            if (!valor) return;
+            var porcentaje = (valor / totalLocal) * 100;
+            var segmentWidth = Math.max(2, porcentaje);
+            var color = palette[idx % palette.length];
+            html += '<div class="direccion-segment" style="width:' + segmentWidth + '%;background:' + color + ';">';
+            if (porcentaje >= 8) {
+              html += '<span class="direccion-segment-label">' + porcentaje.toFixed(1) + '%</span>';
+            }
+            html += '</div>';
+          });
+        } else {
+          html += '<div class="direccion-segment" style="width:100%;background:linear-gradient(135deg,var(--primary) 0%,var(--accent) 100%);"></div>';
+        }
+
+        html += '</div>';
         html += '</div>';
         html += '</div>';
       });
-      html += '</div>';
+      html += '</div></div>';
       container.innerHTML = html;
     }
-    
+
     // ==================== FILTROS TABLA EMPLEADOS ====================
     function aplicarFiltrosEmpleados() {
       if (!document.getElementById("tbodyEmpleadosGlobal")) return;
       var filtroProyecto = (document.getElementById("filtroProyectoEmpleados")?.value || "").toLowerCase();
       var filtroDireccion = (document.getElementById("filtroDireccion")?.value || "").toLowerCase();
       var filtroGerencia = (document.getElementById("filtroGerencia")?.value || "").toLowerCase();
+      var filtroTipoPlanta = (document.getElementById("filtroTipoPlanta")?.value || "").toLowerCase();
       var filtroNombre = (document.getElementById("filtroNombreEmpleado")?.value || "").toLowerCase();
       var filtroDesde = document.getElementById("filtroFechaDesde")?.value || "";
       var filtroHasta = document.getElementById("filtroFechaHasta")?.value || "";
       var filtroTermDesde = document.getElementById("filtroTerminacionDesde")?.value || "";
       var filtroTermHasta = document.getElementById("filtroTerminacionHasta")?.value || "";
       var filtroProrrogas = document.getElementById("filtroProrrogas")?.value || "";
-      
+
       var filas = document.querySelectorAll(".fila-empleado");
       var contador = 0;
-      
+
       // Ocultar/mostrar columnas de meses según rango de fechas
       var columnasMes = document.querySelectorAll(".col-mes");
       var celdasMes = document.querySelectorAll(".celda-mes");
       var totalesMes = document.querySelectorAll(".col-total-mes");
-      
-      columnasMes.forEach(function(col) {
+
+      columnasMes.forEach(function (col) {
         var mes = col.getAttribute("data-mes");
         var mostrar = true;
-        
+
         if (filtroDesde && mes < filtroDesde) mostrar = false;
         if (filtroHasta && mes > filtroHasta) mostrar = false;
-        
+
         col.style.display = mostrar ? "" : "none";
       });
-      
+
       // Arrays para acumular totales
       var totalesPorMes = {};
-      
-      filas.forEach(function(fila) {
+
+      filas.forEach(function (fila) {
         var empleado = fila.getAttribute("data-empleado");
         var proyectos = fila.getAttribute("data-proyectos");
         var direccion = fila.getAttribute("data-direccion");
         var gerencia = fila.getAttribute("data-gerencia");
+        var tipoPlanta = fila.getAttribute("data-tplanta");
         var fterminacion = fila.getAttribute("data-fterminacion");
         var prorrogas = fila.getAttribute("data-prorrogas");
-        
+
         var mostrar = true;
-        
+
         if (filtroProyecto && proyectos.indexOf(filtroProyecto) === -1) mostrar = false;
         if (filtroDireccion && direccion !== filtroDireccion) mostrar = false;
         if (filtroGerencia && gerencia !== filtroGerencia) mostrar = false;
+        if (filtroTipoPlanta && tipoPlanta !== filtroTipoPlanta) mostrar = false;
         if (filtroNombre && empleado.indexOf(filtroNombre) === -1) mostrar = false;
         if (filtroProrrogas && prorrogas !== filtroProrrogas) mostrar = false;
-        
+
         // Filtro por F. Terminación
         if (filtroTermDesde && fterminacion && fterminacion < filtroTermDesde) mostrar = false;
         if (filtroTermHasta && fterminacion && fterminacion > filtroTermHasta) mostrar = false;
-        
+
         fila.style.display = mostrar ? "" : "none";
-        
+
         if (mostrar) {
           contador++;
-          
+
           // Acumular totales por mes de filas visibles
           var celdasMesFila = fila.querySelectorAll(".celda-mes");
-          celdasMesFila.forEach(function(celda) {
+          celdasMesFila.forEach(function (celda) {
             var mes = celda.getAttribute("data-mes");
             var valorTexto = celda.textContent.trim();
-            
+
             if (valorTexto !== "—") {
               var valor = 0;
               if (valorTexto.includes("M")) {
@@ -1057,90 +1168,92 @@
               } else {
                 valor = parseFloat(valorTexto.replace(/[$,]/g, "")) || 0;
               }
-              
+
               if (!totalesPorMes[mes]) totalesPorMes[mes] = 0;
               totalesPorMes[mes] += valor;
             }
           });
         }
-        
+
         // Ocultar/mostrar celdas de mes según rango de fechas
         var celdasMesFila = fila.querySelectorAll(".celda-mes");
-        celdasMesFila.forEach(function(celda) {
+        celdasMesFila.forEach(function (celda) {
           var mes = celda.getAttribute("data-mes");
           var mostrarCelda = true;
-          
+
           if (filtroDesde && mes < filtroDesde) mostrarCelda = false;
           if (filtroHasta && mes > filtroHasta) mostrarCelda = false;
-          
+
           celda.style.display = mostrarCelda ? "" : "none";
         });
       });
-      
+
       // Actualizar totales por mes
-      totalesMes.forEach(function(col) {
+      totalesMes.forEach(function (col) {
         var mes = col.getAttribute("data-mes");
         var mostrar = true;
-        
+
         if (filtroDesde && mes < filtroDesde) mostrar = false;
         if (filtroHasta && mes > filtroHasta) mostrar = false;
-        
+
         col.style.display = mostrar ? "" : "none";
-        
+
         if (mostrar && totalesPorMes[mes]) {
           col.textContent = moneyCompact(totalesPorMes[mes]);
         }
       });
-      
+
       // Actualizar gran total
       var granTotal = 0;
-      Object.values(totalesPorMes).forEach(function(val) {
+      Object.values(totalesPorMes).forEach(function (val) {
         granTotal += val;
       });
-      
+
       var granTotalEl = document.getElementById("granTotalGeneral");
       if (granTotalEl) {
         granTotalEl.textContent = moneyCompact(granTotal);
       }
-      
+
       // Actualizar contador
       var contadorEl = document.getElementById("contadorResultados");
       if (contadorEl) {
         contadorEl.textContent = "Mostrando " + contador + " empleado(s)";
       }
     }
-    
+
     function limpiarFiltrosEmpleados() {
       var filtroProyecto = document.getElementById("filtroProyectoEmpleados");
       var filtroDireccion = document.getElementById("filtroDireccion");
       var filtroGerencia = document.getElementById("filtroGerencia");
+      var filtroTipoPlanta = document.getElementById("filtroTipoPlanta");
       var filtroNombre = document.getElementById("filtroNombreEmpleado");
       var filtroDesde = document.getElementById("filtroFechaDesde");
       var filtroHasta = document.getElementById("filtroFechaHasta");
       var filtroTermDesde = document.getElementById("filtroTerminacionDesde");
       var filtroTermHasta = document.getElementById("filtroTerminacionHasta");
       var filtroProrrogas = document.getElementById("filtroProrrogas");
-      
+
       if (filtroProyecto) filtroProyecto.value = "";
       if (filtroDireccion) filtroDireccion.value = "";
       if (filtroGerencia) filtroGerencia.value = "";
+      if (filtroTipoPlanta) filtroTipoPlanta.value = "";
       if (filtroNombre) filtroNombre.value = "";
       if (filtroDesde) filtroDesde.value = "";
       if (filtroHasta) filtroHasta.value = "";
       if (filtroTermDesde) filtroTermDesde.value = "";
       if (filtroTermHasta) filtroTermHasta.value = "";
       if (filtroProrrogas) filtroProrrogas.value = "";
-      
+
       aplicarFiltrosEmpleados();
     }
-    
+
     // ==================== TRAMOS: EDICIÓN Y ELIMINACIÓN ====================
     function nuevoTramo() {
       if (!DATOS_ACTUAL || !DATOS_ACTUAL.empleado) {
         alert("Primero debes buscar un empleado");
         return;
       }
-      
+
       TRAMO_EDITANDO = null;
       document.getElementById("formId").value = "";
       document.getElementById("formFechaInicio").value = "";
@@ -1153,19 +1266,19 @@
       document.getElementById("formSubcomponente").value = "";
       document.getElementById("formCategoria").value = "";
       document.getElementById("formResponsable").value = "";
-      
+
       document.getElementById("modalTramo").style.display = "flex";
       document.getElementById("tituloModal").textContent = "➕ Nuevo Tramo";
     }
-    
+
     function editarTramo(id) {
       if (!DATOS_ACTUAL || !DATOS_ACTUAL.tramos) return;
-      
-      var tramo = DATOS_ACTUAL.tramos.find(function(t) { return t.id == id; });
+
+      var tramo = DATOS_ACTUAL.tramos.find(function (t) { return t.id == id; });
       if (!tramo) return;
-      
+
       TRAMO_EDITANDO = tramo;
-      
+
       document.getElementById("formId").value = tramo.id || "";
       document.getElementById("formFechaInicio").value = tramo.fechaInicio || "";
       document.getElementById("formFechaFin").value = tramo.fechaFin || "";
@@ -1177,19 +1290,19 @@
       document.getElementById("formSubcomponente").value = tramo.subcomponente || "";
       document.getElementById("formCategoria").value = tramo.categoria || "";
       document.getElementById("formResponsable").value = tramo.responsable || "";
-      
+
       document.getElementById("modalTramo").style.display = "flex";
       document.getElementById("tituloModal").textContent = "✏️ Editar Tramo";
     }
-    
+
     function cerrarModalTramo() {
       document.getElementById("modalTramo").style.display = "none";
       TRAMO_EDITANDO = null;
     }
-    
+
     function guardarTramo() {
       if (!DATOS_ACTUAL || !DATOS_ACTUAL.empleado) return;
-      
+
       var datos = {
         id: document.getElementById("formId").value,
         cedula: DATOS_ACTUAL.empleado.cedula,
@@ -1206,16 +1319,16 @@
         categoria: document.getElementById("formCategoria").value,
         responsable: document.getElementById("formResponsable").value
       };
-      
+
       var btnGuardar = event.target;
       btnGuardar.disabled = true;
       btnGuardar.textContent = "Guardando...";
-      
+
       google.script.run
-        .withSuccessHandler(function(res) {
+        .withSuccessHandler(function (res) {
           btnGuardar.disabled = false;
           btnGuardar.textContent = "💾 Guardar";
-          
+
           if (res && res.ok) {
             cerrarModalTramo();
             buscar(); // Recargar datos
@@ -1223,107 +1336,98 @@
             alert("Error: " + (res?.message || "Error desconocido"));
           }
         })
-        .withFailureHandler(function(err) {
+        .withFailureHandler(function (err) {
           btnGuardar.disabled = false;
           btnGuardar.textContent = "💾 Guardar";
           alert("Error: " + err);
         })
         .guardarTramoFinanciacion(datos);
     }
-    
+
     function confirmarEliminar(id) {
       ID_A_BORRAR = id;
       document.getElementById("modalConfirmar").style.display = "flex";
     }
-    
+
     function cerrarModalConfirmar() {
       document.getElementById("modalConfirmar").style.display = "none";
       ID_A_BORRAR = null;
     }
-    
+
     function eliminarTramoConfirmado() {
       if (!ID_A_BORRAR) return;
-      
+
       var btnEliminar = document.querySelector(".btn-modal-delete");
       btnEliminar.disabled = true;
       btnEliminar.textContent = "Eliminando...";
-      
+
       google.script.run
-        .withSuccessHandler(function(res) {
+        .withSuccessHandler(function (res) {
           btnEliminar.disabled = false;
           btnEliminar.textContent = "🗑️ Eliminar";
           cerrarModalConfirmar();
-          
+
           if (res && res.ok) {
             buscar(); // Recargar datos
           } else {
             alert("Error: " + (res?.message || "Error desconocido"));
           }
         })
-        .withFailureHandler(function(err) {
+        .withFailureHandler(function (err) {
           btnEliminar.disabled = false;
           btnEliminar.textContent = "🗑️ Eliminar";
           alert("Error: " + err);
         })
         .eliminarTramoFinanciacion(ID_A_BORRAR);
     }
-    
+
     function verDetalleMes(anioMes) {
       if (!DATOS_ACTUAL || !DATOS_ACTUAL.months) return;
-      
-      var mes = DATOS_ACTUAL.months.find(function(m) { return m.anioMes === anioMes; });
+
+      var mes = DATOS_ACTUAL.months.find(function (m) { return m.anioMes === anioMes; });
       if (!mes || !mes.detalle) return;
-      
-      var html = '<div style="max-height:500px;overflow-y:auto;">';
-      html += '<h3 style="margin-top:0;color:var(--primary);border-bottom:2px solid var(--border);padding-bottom:12px;">' + formatMes(anioMes) + ' - Detalle Completo</h3>';
-      
-      mes.detalle.forEach(function(d) {
-        html += '<div class="detail-item">';
-        html += '<div class="detail-header">';
-        html += '<span>' + escapeHtml(getName('proyectos', d.proyecto)) + '</span>';
-        html += '<span>' + money(d.valor) + '</span>';
+
+      var html = '<div class="detalle-mes-modal">';
+      html += '<div class="detalle-mes-title">' + formatMes(anioMes) + ' · Detalle completo</div>';
+
+      mes.detalle.forEach(function (d) {
+        html += '<div class="detalle-mes-card">';
+        html += '<div class="detalle-mes-card-header">';
+        html += '<div class="detalle-mes-project">' + escapeHtml(getName('proyectos', d.proyecto)) + '</div>';
+        html += '<div class="detalle-mes-amount">' + money(d.valor) + '</div>';
         html += '</div>';
-        html += '<div class="detail-grid">';
-        html += '<div class="detail-row"><span>🏷️ Rubro:</span> ' + escapeHtml(d.rubro || "---") + '</div>';
-        html += '<div class="detail-row"><span>📅 Días:</span> ' + d.dias + '</div>';
-        html += '<div class="detail-row"><span>💰 Fuente:</span> ' + escapeHtml(getName('fuentes', d.fuente)) + '</div>';
-        html += '<div class="detail-row"><span>📦 Componente:</span> ' + escapeHtml(getName('componentes', d.componente)) + '</div>';
-        html += '<div class="detail-row"><span>📋 Subcomponente:</span> ' + escapeHtml(getName('subcomponentes', d.subcomponente)) + '</div>';
-        html += '<div class="detail-row"><span>🏷️ Categoría:</span> ' + escapeHtml(getName('categorias', d.categoria)) + '</div>';
-        html += '<div class="detail-row"><span>👤 Responsable:</span> ' + escapeHtml(getName('responsables', d.responsable)) + '</div>';
-        html += '<div class="detail-row"><span>💵 Salario Mensual:</span> ' + maskMoney() + '</div>';
+        html += '<div class="detalle-mes-grid">';
+        html += '<div class="detalle-mes-field"><span>Días:</span><strong>' + d.dias + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Salario mensual:</span><strong>' + maskMoney() + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Rubro:</span><strong>' + escapeHtml(d.rubro || "---") + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Fuente:</span><strong>' + escapeHtml(getName('fuentes', d.fuente)) + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Componente:</span><strong>' + escapeHtml(getName('componentes', d.componente)) + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Subcomponente:</span><strong>' + escapeHtml(getName('subcomponentes', d.subcomponente)) + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Categoría:</span><strong>' + escapeHtml(getName('categorias', d.categoria)) + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Responsable:</span><strong>' + escapeHtml(getName('responsables', d.responsable)) + '</strong></div>';
         html += '</div>';
-        html += '<div class="detail-footer">';
-        html += '<div><strong>ID:</strong> ' + escapeHtml(d.id) + '</div>';
-        html += '<div><strong>Contrato:</strong> ' + escapeHtml(d.contrato || "---") + '</div>';
+        html += '<div class="detalle-mes-footer">';
+        html += '<div><span>ID</span><strong>' + escapeHtml(d.id) + '</strong></div>';
+        html += '<div><span>Contrato</span><strong>' + escapeHtml(d.contrato || "---") + '</strong></div>';
         html += '</div>';
         html += '</div>';
       });
-      
+
       html += '</div>';
-      
+
       var modal = document.getElementById("modalDetalle");
       document.getElementById("detalleContent").innerHTML = html;
       modal.style.display = "flex";
     }
-    
+
     function cerrarModalDetalle() {
       document.getElementById("modalDetalle").style.display = "none";
     }
-    
+
     // ==================== INICIALIZACIÓN ====================
-    window.onload = function() {
-      google.script.run
-        .withSuccessHandler(function(user) {
-          document.getElementById("userEmail").textContent = user.email || "Desconocido";
-        })
-        .getLoggedUser();
-      
-      asegurarCatalogos().then(function() {
-        poblarSelects();
-      });
-    };
-    
+    // ==================== INICIALIZACIÓN (Consolidado arriba) ====================
+    // window.onload movido al inicio
+
     function poblarSelects() {
       var selects = {
         formProyecto: CATS.proyectos,
@@ -1333,13 +1437,13 @@
         formCategoria: CATS.categorias,
         formResponsable: CATS.responsables
       };
-      
+
       for (var id in selects) {
         var sel = document.getElementById(id);
         if (!sel) continue;
-        
+
         sel.innerHTML = '<option value="">-- Seleccione --</option>';
-        selects[id].forEach(function(item) {
+        selects[id].forEach(function (item) {
           var opt = document.createElement("option");
           opt.value = item.id;
           opt.textContent = item.nombre;
@@ -1348,232 +1452,237 @@
       }
     }
 
-    
-
-function irAVistaMensualizadaGlobal() {
-  document.getElementById("paginaInicio").style.display = "none";
-  document.getElementById("seccionConsulta").style.display = "none";
-  document.getElementById("vistaGlobal").style.display = "none";
-  document.getElementById("vistaIndividual").style.display = "none";
-  document.getElementById("vistaMensualizadaGlobal").style.display = "block";
-}
-
-function cargarMensualizadoGlobal() {
-  var msgDiv = document.getElementById("msgMensualizado");
-  msgDiv.style.display = "block";
-  msgDiv.textContent = "⏳ Cargando datos...";
-  msgDiv.className = "msg";
-
-  google.script.run
-    .withSuccessHandler(function(res) {
-      if (res.ok) {
-        renderMensualizadoGlobal(res.data);
-        msgDiv.style.display = "none";
-      } else {
-        msgDiv.textContent = "❌ " + (res.message || "Error al cargar datos");
-        msgDiv.className = "msg err";
-      }
-    })
-    .withFailureHandler(function(err) {
-      msgDiv.textContent = "❌ Error: " + err;
-      msgDiv.className = "msg err";
-    })
-    .getMensualizadoGlobal();
-}
-
-function renderMensualizadoGlobal(meses) {
-  var container = document.getElementById("mensualizadoContent");
-
-  // ✅ Guardar cache para el "Ver Detalle"
-  MENSUALIZADO_GLOBAL_CACHE = Array.isArray(meses) ? meses : [];
-
-  if (!MENSUALIZADO_GLOBAL_CACHE.length) {
-    container.innerHTML = "<div class='msg warn'>No hay datos mensualizados</div>";
-    return;
-  }
-
-  var html = "<div class='tableWrap'><table><thead><tr><th>Mes</th><th>Total</th><th>Detalle</th></tr></thead><tbody>";
-  MENSUALIZADO_GLOBAL_CACHE.forEach(function(m) {
-    html += "<tr>";
-    html += "<td>" + formatMes(m.anioMes) + "</td>";
-    html += "<td class='num'>" + money(m.total) + "</td>";
-    html += "<td><button class='btnSecondary' style='width:auto;padding:8px 12px;' onclick='verDetalleMesGlobal(\"" + m.anioMes + "\")'>Ver Detalle</button></td>";
-    html += "</tr>";
-  });
-  html += "</tbody></table></div>";
-
-  container.innerHTML = html;
-}
 
 
-function descargarMensualizadoCSV() {
-  var msgDiv = document.getElementById("msgMensualizado");
-  msgDiv.style.display = "block";
-  msgDiv.textContent = "⏳ Generando archivo CSV...";
-  msgDiv.className = "msg";
+    function irAVistaMensualizadaGlobal() {
+      document.getElementById("paginaInicio").style.display = "none";
+      document.getElementById("seccionConsulta").style.display = "none";
+      document.getElementById("vistaGlobal").style.display = "none";
+      document.getElementById("vistaIndividual").style.display = "none";
+      document.getElementById("vistaMensualizadaGlobal").style.display = "block";
+    }
 
-  google.script.run
-    .withSuccessHandler(function(res) {
-      if (res.ok) {
-        msgDiv.innerHTML = "✅ Archivo listo: <a href='" + res.url + "' target='_blank'>Descargar CSV</a>";
-        msgDiv.className = "msg ok";
-      } else {
-        msgDiv.textContent = "❌ " + (res.message || "Error generando CSV");
-        msgDiv.className = "msg err";
-      }
-    })
-    .withFailureHandler(function(err) {
-      msgDiv.textContent = "❌ Error: " + err;
-      msgDiv.className = "msg err";
-    })
-    .exportMensualizadoCSV();
-}
+    function cargarMensualizadoGlobal() {
+      var msgDiv = document.getElementById("msgMensualizado");
+      msgDiv.style.display = "block";
+      msgDiv.textContent = "⏳ Cargando datos...";
+      msgDiv.className = "msg";
 
-// ==================== DETALLE MENSUALIZADO GLOBAL (NUEVO) ====================
-function verDetalleMesGlobal(anioMes) {
-  // ⚠️ NO confundir con verDetalleMes(anioMes) (empleado)
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res.ok) {
+            renderMensualizadoGlobal(res.data);
+            msgDiv.style.display = "none";
+          } else {
+            msgDiv.textContent = "❌ " + (res.message || "Error al cargar datos");
+            msgDiv.className = "msg err";
+          }
+        })
+        .withFailureHandler(function (err) {
+          msgDiv.textContent = "❌ Error: " + err;
+          msgDiv.className = "msg err";
+        })
+        .getMensualizadoGlobal();
+    }
 
-  if (!MENSUALIZADO_GLOBAL_CACHE || !Array.isArray(MENSUALIZADO_GLOBAL_CACHE)) {
-    alert("Primero debes cargar los datos mensualizados globales.");
-    return;
-  }
+    function renderMensualizadoGlobal(meses) {
+      var container = document.getElementById("mensualizadoContent");
 
-  var mesObj = MENSUALIZADO_GLOBAL_CACHE.find(function(x) { return x.anioMes === anioMes; });
-  if (!mesObj) {
-    alert("No se encontró información para el mes " + anioMes);
-    return;
-  }
+      // ✅ Guardar cache para el "Ver Detalle"
+      MENSUALIZADO_GLOBAL_CACHE = Array.isArray(meses) ? meses : [];
 
-  // ✅ Igual que en buscar(): garantizar catálogos antes de usar getName('proyectos', ...)
-  asegurarCatalogos().then(function() {
-
-    var detalle = Array.isArray(mesObj.detalle) ? mesObj.detalle : [];
-
-    // ---- 1) Agrupar por proyecto (guardando id y nombre)
-    var porProyecto = {};
-    var totalMes = 0;
-
-    detalle.forEach(function(d) {
-      var proyId = d.proyecto || "SIN_PROY";
-
-      // ✅ nombre desde catálogo (si no existe, getName devuelve el id) :contentReference[oaicite:1]{index=1}
-      var proyNombre = getName("proyectos", proyId);
-
-      if (!porProyecto[proyId]) {
-        porProyecto[proyId] = {
-          proyectoId: proyId,
-          proyectoNombre: proyNombre,
-          total: 0,
-          tramos: 0,
-          contratos: new Set()
-        };
+      if (!MENSUALIZADO_GLOBAL_CACHE.length) {
+        container.innerHTML = "<div class='msg warn'>No hay datos mensualizados</div>";
+        return;
       }
 
-      var val = Number(d.valor || 0) || 0;
-      porProyecto[proyId].total += val;
-      porProyecto[proyId].tramos += 1;
-      if (d.contrato) porProyecto[proyId].contratos.add(String(d.contrato));
+      var html = "<div class='tableWrap'><table><thead><tr><th>Mes</th><th>Total</th><th>Detalle</th></tr></thead><tbody>";
+      MENSUALIZADO_GLOBAL_CACHE.forEach(function (m) {
+        html += "<tr>";
+        html += "<td>" + formatMes(m.anioMes) + "</td>";
+        html += "<td class='num'>" + money(m.total) + "</td>";
+        html += "<td><button class='btnSecondary' style='width:auto;padding:8px 12px;' onclick='verDetalleMesGlobal(\"" + m.anioMes + "\")'>Ver Detalle</button></td>";
+        html += "</tr>";
+      });
+      html += "</tbody></table></div>";
 
-      totalMes += val;
-    });
-
-    var lista = Object.values(porProyecto).sort(function(a, b) { return b.total - a.total; });
-
-    // ---- 2) Render (mostrar NOMBRE, no CÓDIGO)
-    document.getElementById("detalleGlobalTitle").textContent =
-      "📅 " + formatMes(anioMes) + " · Resumen de Proyectos Financiadores";
-
-    var html = "";
-    html += "<div class='tableWrap' style='max-height:55vh;overflow:auto;'>";
-    html += "<table class='tabla-compacta' style='min-width:700px;'>";
-    html += "<thead><tr><th>Proyecto</th><th class='num'>Total mes</th><th class='num'># tramos</th><th class='num'># contratos</th></tr></thead>";
-    html += "<tbody id='tbodyDetalleGlobalProyectos'>";
-
-    lista.forEach(function(p) {
-      html += "<tr class='fila-proy-global' data-proy='" + escapeHtml(p.proyectoNombre).toLowerCase() + "'>";
-      html += "  <td style='font-weight:600;'>" + escapeHtml(p.proyectoNombre) + "</td>";
-      html += "  <td class='num'>" + money(p.total) + "</td>";
-      html += "  <td class='num'>" + p.tramos + "</td>";
-      html += "  <td class='num'>" + (p.contratos ? p.contratos.size : 0) + "</td>";
-      html += "</tr>";
-    });
-
-    html += "</tbody></table></div>";
-
-    document.getElementById("detalleGlobalContent").innerHTML = html;
-    document.getElementById("modalDetalleGlobal").style.display = "flex";
-
-  }).catch(function() {
-    alert("No fue posible cargar catálogos. Intenta de nuevo.");
-  });
-}
+      container.innerHTML = html;
+    }
 
 
-// Filtro (solo front)
-function filtrarDetalleGlobalProyectos() {
-  var q = (document.getElementById("buscadorProyectoMesGlobal")?.value || "").toLowerCase().trim();
-  var filas = document.querySelectorAll("#tbodyDetalleGlobalProyectos .fila-proy-global");
-  filas.forEach(function(tr) {
-    var key = tr.getAttribute("data-proy") || "";
-    tr.style.display = (!q || key.indexOf(q) !== -1) ? "" : "none";
-  });
-}
+    function descargarMensualizadoCSV() {
+      var msgDiv = document.getElementById("msgMensualizado");
+      msgDiv.style.display = "block";
+      msgDiv.textContent = "⏳ Generando archivo CSV...";
+      msgDiv.className = "msg";
 
-function cerrarModalDetalleGlobal() {
-  document.getElementById("modalDetalleGlobal").style.display = "none";
-}
+      google.script.run
+        .withSuccessHandler(function (res) {
+          if (res.ok) {
+            msgDiv.innerHTML = "✅ Archivo listo: <a href='" + res.url + "' target='_blank'>Descargar CSV</a>";
+            msgDiv.className = "msg ok";
+          } else {
+            msgDiv.textContent = "❌ " + (res.message || "Error generando CSV");
+            msgDiv.className = "msg err";
+          }
+        })
+        .withFailureHandler(function (err) {
+          msgDiv.textContent = "❌ Error: " + err;
+          msgDiv.className = "msg err";
+        })
+        .exportMensualizadoCSV();
+    }
+
+    // ==================== DETALLE MENSUALIZADO GLOBAL (NUEVO) ====================
+    function verDetalleMesGlobal(anioMes) {
+      // ⚠️ NO confundir con verDetalleMes(anioMes) (empleado)
+
+      if (!MENSUALIZADO_GLOBAL_CACHE || !Array.isArray(MENSUALIZADO_GLOBAL_CACHE)) {
+        alert("Primero debes cargar los datos mensualizados globales.");
+        return;
+      }
+
+      var mesObj = MENSUALIZADO_GLOBAL_CACHE.find(function (x) { return x.anioMes === anioMes; });
+      if (!mesObj) {
+        alert("No se encontró información para el mes " + anioMes);
+        return;
+      }
+
+      // ✅ Igual que en buscar(): garantizar catálogos antes de usar getName('proyectos', ...)
+      asegurarCatalogos().then(function () {
+
+        var detalle = Array.isArray(mesObj.detalle) ? mesObj.detalle : [];
+
+        // ---- 1) Agrupar por proyecto (guardando id y nombre)
+        var porProyecto = {};
+        var totalMes = 0;
+
+        detalle.forEach(function (d) {
+          var proyId = d.proyecto || "SIN_PROY";
+
+          // ✅ nombre desde catálogo (si no existe, getName devuelve el id) :contentReference[oaicite:1]{index=1}
+          var proyNombre = getName("proyectos", proyId);
+
+          if (!porProyecto[proyId]) {
+            porProyecto[proyId] = {
+              proyectoId: proyId,
+              proyectoNombre: proyNombre,
+              total: 0,
+              tramos: 0,
+              contratos: new Set()
+            };
+          }
+
+          var val = Number(d.valor || 0) || 0;
+          porProyecto[proyId].total += val;
+          porProyecto[proyId].tramos += 1;
+          if (d.contrato) porProyecto[proyId].contratos.add(String(d.contrato));
+
+          totalMes += val;
+        });
+
+        var lista = Object.values(porProyecto).sort(function (a, b) { return b.total - a.total; });
+
+        // ---- 2) Render (mostrar NOMBRE, no CÓDIGO)
+        document.getElementById("detalleGlobalTitle").textContent =
+          "📅 " + formatMes(anioMes) + " · Resumen de Proyectos Financiadores";
+
+        var html = "";
+        html += "<div class='tableWrap' style='max-height:55vh;overflow:auto;'>";
+        html += "<table class='tabla-compacta' style='min-width:700px;'>";
+        html += "<thead><tr><th>Proyecto</th><th class='num'>Total mes</th><th class='num'># tramos</th><th class='num'># contratos</th></tr></thead>";
+        html += "<tbody id='tbodyDetalleGlobalProyectos'>";
+
+        lista.forEach(function (p) {
+          html += "<tr class='fila-proy-global' data-proy='" + escapeHtml(p.proyectoNombre).toLowerCase() + "'>";
+          html += "  <td style='font-weight:600;'>" + escapeHtml(p.proyectoNombre) + "</td>";
+          html += "  <td class='num'>" + money(p.total) + "</td>";
+          html += "  <td class='num'>" + p.tramos + "</td>";
+          html += "  <td class='num'>" + (p.contratos ? p.contratos.size : 0) + "</td>";
+          html += "</tr>";
+        });
+
+        html += "</tbody></table></div>";
+
+        document.getElementById("detalleGlobalContent").innerHTML = html;
+        document.getElementById("modalDetalleGlobal").style.display = "flex";
+
+      }).catch(function () {
+        alert("No fue posible cargar catálogos. Intenta de nuevo.");
+      });
+    }
 
 
-function renderDetalleMesGlobal(data) {
-  var html = "";
-  html += '<div style="max-height:560px;overflow-y:auto;">';
-  html += '<h3 style="margin-top:0;color:var(--primary);border-bottom:2px solid var(--border);padding-bottom:12px;">'
-       + formatMes(data.anioMes) + ' — Proyectos que financian el mes</h3>';
+    // Filtro (solo front)
+    function filtrarDetalleGlobalProyectos() {
+      var q = (document.getElementById("buscadorProyectoMesGlobal")?.value || "").toLowerCase().trim();
+      var filas = document.querySelectorAll("#tbodyDetalleGlobalProyectos .fila-proy-global");
+      filas.forEach(function (tr) {
+        var key = tr.getAttribute("data-proy") || "";
+        tr.style.display = (!q || key.indexOf(q) !== -1) ? "" : "none";
+      });
+    }
 
-  html += '<div class="hint" style="margin: 12px 0 18px 0;">'
-       + 'Total mes: <strong>' + money(data.totalMes) + '</strong> · '
-       + 'Proyectos: <strong>' + (data.cantidadProyectos || 0) + '</strong>'
-       + '</div>';
-
-  if (!data.proyectos || data.proyectos.length === 0) {
-    html += '<div class="msg warn">No hay proyectos para este mes.</div>';
-    html += '</div>';
-    document.getElementById("detalleGlobalContent").innerHTML = html;
-    return;
-  }
-
-  // Tabla resumen
-  html += "<div class='tableWrap'><table class='tabla-compacta'>";
-  html += "<thead><tr><th>Proyecto</th><th class='num'>Total</th><th>Tramos</th><th>Empleados</th></tr></thead><tbody>";
-  data.proyectos.forEach(function(p) {
-    html += "<tr>";
-    html += "<td>" + escapeHtml(p.proyectoNombre) + "</td>";
-    html += "<td class='num'>" + money(p.total) + "</td>";
-    html += "<td style='text-align:center;'>" + (p.cantidadTramos || 0) + "</td>";
-    html += "<td style='text-align:center;'>" + (p.cantidadEmpleados || 0) + "</td>";
-    html += "</tr>";
-  });
-  html += "</tbody></table></div>";
-
-  html += "</div>";
-  document.getElementById("detalleGlobalContent").innerHTML = html;
-}
-
-function cerrarModalDetalleGlobal() {
-  document.getElementById("modalDetalleGlobal").style.display = "none";
-}
+    function cerrarModalDetalleGlobal() {
+      document.getElementById("modalDetalleGlobal").style.display = "none";
+    }
 
 
-    
+    function renderDetalleMesGlobal(data) {
+      var html = "";
+      html += '<div style="max-height:560px;overflow-y:auto;">';
+      html += '<h3 style="margin-top:0;color:var(--primary);border-bottom:2px solid var(--border);padding-bottom:12px;">'
+        + formatMes(data.anioMes) + ' — Proyectos que financian el mes</h3>';
+
+      html += '<div class="hint" style="margin: 12px 0 18px 0;">'
+        + 'Total mes: <strong>' + money(data.totalMes) + '</strong> · '
+        + 'Proyectos: <strong>' + (data.cantidadProyectos || 0) + '</strong>'
+        + '</div>';
+
+      if (!data.proyectos || data.proyectos.length === 0) {
+        html += '<div class="msg warn">No hay proyectos para este mes.</div>';
+        html += '</div>';
+        document.getElementById("detalleGlobalContent").innerHTML = html;
+        return;
+      }
+
+      // Tabla resumen
+      html += "<div class='tableWrap'><table class='tabla-compacta'>";
+      html += "<thead><tr><th>Proyecto</th><th class='num'>Total</th><th>Tramos</th><th>Empleados</th></tr></thead><tbody>";
+      data.proyectos.forEach(function (p) {
+        html += "<tr>";
+        html += "<td>" + escapeHtml(p.proyectoNombre) + "</td>";
+        html += "<td class='num'>" + money(p.total) + "</td>";
+        html += "<td style='text-align:center;'>" + (p.cantidadTramos || 0) + "</td>";
+        html += "<td style='text-align:center;'>" + (p.cantidadEmpleados || 0) + "</td>";
+        html += "</tr>";
+      });
+      html += "</tbody></table></div>";
+
+      html += "</div>";
+      document.getElementById("detalleGlobalContent").innerHTML = html;
+    }
+
+    function cerrarModalDetalleGlobal() {
+      document.getElementById("modalDetalleGlobal").style.display = "none";
+    }
+
+
+
     console.log("✅ Todas las funciones definidas");
   </script>
 </head>
+
 <body>
   <div class="wrap">
     <header class="topbar">
-      <div>
-        <div class="title">Guadua</div>
-        <div class="subtitle">Herramienta sustentada en bases sólidas que permite articular la planeación de la nómina del Instituto</div>
+      <div class="header-logo">
+        <span class="title-logo" role="img" aria-label="Humboldt"></span>
+      </div>
+      <div class="header-title">
+        <div class="title-text">Guadua</div>
+        <div class="subtitle">Herramienta sustentada en bases sólidas que permite articular la planeación de la nómina
+          del Instituto</div>
       </div>
       <div class="userbox">
         <div class="label">Usuario</div>
@@ -1584,49 +1693,52 @@ function cerrarModalDetalleGlobal() {
     <!-- ========== PÁGINA INICIO ========== -->
 
 
-<div id="paginaInicio">
-  <section class="card">
-    <div style="text-align:center;padding:40px 20px;">
-      <div style="font-size:48px;margin-bottom:20px;">🎋</div>
-      <h2 style="font-size:28px;font-weight:600;color:var(--primary);margin-bottom:12px;">Bienvenido a Guadua</h2>
-      <p style="color:var(--text-muted);font-size:16px;max-width:600px;margin:0 auto 40px;">
-        Sistema integral de planeación y gestión de nómina del Instituto Humboldt
-      </p>
+    <div id="paginaInicio">
+      <section class="card">
+        <div style="text-align:center;padding:40px 20px;">
+          <img src="https://lh3.googleusercontent.com/d/10RKUle7zUMB361HeRMELUwSTsfZKYGO-" alt="Guadua"
+            style="width:64px;height:64px;object-fit:contain;margin-bottom:20px;"
+            onerror="this.onerror=null;this.src='https://drive.google.com/uc?export=view&id=10RKUle7zUMB361HeRMELUwSTsfZKYGO-';" />
+          <h2 style="font-size:28px;font-weight:600;color:var(--primary);margin-bottom:12px;">Bienvenido a Guadua</h2>
+          <p style="color:var(--text-muted);font-size:16px;max-width:600px;margin:0 auto 40px;">
+            Sistema integral de planeación y gestión de nómina del Instituto Humboldt
+          </p>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;">
+          <!-- Consultar Empleado -->
+          <div id="btnConsultar" class="menu-card disabled" onclick="irAConsultaEmpleado()">
+            <div class="menu-icon">👤</div>
+            <div class="menu-title">Consultar Empleado</div>
+            <div class="menu-desc">Buscar por cédula y ver información detallada</div>
+            <div class="menu-arrow">→</div>
+          </div>
+
+          <!-- Dashboard Global -->
+          <div id="btnDashboard" class="menu-card disabled" onclick="irADashboardGlobal()">
+            <div class="menu-icon">🌍</div>
+            <div class="menu-title">Dashboard Global</div>
+            <div class="menu-desc">Vista consolidada de la organización</div>
+            <div class="menu-arrow">→</div>
+          </div>
+
+          <!-- Vista Mensualizada (usa tu función de navegación) -->
+          <div id="btnMensualizado" class="menu-card disabled" onclick="irAVistaMensualizadaGlobal()">
+            <div class="menu-icon">📅</div>
+            <div class="menu-title">Vista Mensualizada</div>
+            <div class="menu-desc">Ver todos los datos mensualizados y exportar a Excel</div>
+            <div class="menu-arrow">→</div>
+          </div>
+        </div>
+      </section>
     </div>
-
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;">
-      <!-- Consultar Empleado -->
-      <div class="menu-card" onclick="irAConsultaEmpleado()">
-        <div class="menu-icon">👤</div>
-        <div class="menu-title">Consultar Empleado</div>
-        <div class="menu-desc">Buscar por cédula y ver información detallada</div>
-        <div class="menu-arrow">→</div>
-      </div>
-
-      <!-- Dashboard Global -->
-      <div class="menu-card" onclick="irADashboardGlobal()">
-        <div class="menu-icon">🌍</div>
-        <div class="menu-title">Dashboard Global</div>
-        <div class="menu-desc">Vista consolidada de la organización</div>
-        <div class="menu-arrow">→</div>
-      </div>
-
-      <!-- Vista Mensualizada (usa tu función de navegación) -->
-      <div class="menu-card" onclick="irAVistaMensualizadaGlobal()">
-        <div class="menu-icon">📅</div>
-        <div class="menu-title">Vista Mensualizada</div>
-        <div class="menu-desc">Ver todos los datos mensualizados y exportar a Excel</div>
-        <div class="menu-arrow">→</div>
-      </div>
-    </div>
-  </section>
-</div>
 
 
 
     <!-- ========== SECCIÓN CONSULTA ========== -->
     <div id="seccionConsulta" style="display:none;">
-      <button class="btnSecondary" onclick="volverAlInicio()" style="width:auto;padding:10px 20px;margin-bottom:20px;">← Volver</button>
+      <button class="btnSecondary" onclick="volverAlInicio()" style="width:auto;padding:10px 20px;margin-bottom:20px;">←
+        Volver</button>
       <section class="card">
         <div class="row" style="grid-template-columns:1fr 180px;">
           <div class="field">
@@ -1709,7 +1821,8 @@ function cerrarModalDetalleGlobal() {
 
     <!-- ========== VISTA GLOBAL ========== -->
     <div id="vistaGlobal" style="display:none;">
-      <button class="btnSecondary" onclick="volverAlInicio()" style="width:auto;padding:10px 20px;margin-bottom:20px;">← Volver</button>
+      <button class="btnSecondary" onclick="volverAlInicio()" style="width:auto;padding:10px 20px;margin-bottom:20px;">←
+        Volver</button>
       <section class="card">
         <div class="sectionTitle">🌍 Dashboard Global</div>
         <div id="msgGlobal" class="msg" style="display:none;"></div>
@@ -1718,10 +1831,11 @@ function cerrarModalDetalleGlobal() {
       </section>
     </div>
 
-    
+
     <!-- ========== VISTA MENSUALIZADA GLOBAL (DEBE IR FUERA DE #paginaInicio) ========== -->
     <div id="vistaMensualizadaGlobal" style="display:none;">
-      <button class="btnSecondary" onclick="volverAlInicio()" style="width:auto;padding:10px 20px;margin-bottom:20px;">← Volver</button>
+      <button class="btnSecondary" onclick="volverAlInicio()" style="width:auto;padding:10px 20px;margin-bottom:20px;">←
+        Volver</button>
 
       <section class="card">
         <div class="sectionTitle">📅 Vista Mensualizada Global</div>
@@ -1739,7 +1853,7 @@ function cerrarModalDetalleGlobal() {
         <div id="mensualizadoContent"></div>
       </section>
     </div>
-    
+
 
 
     <!-- ========== VISTA INDIVIDUAL ========== -->
@@ -1751,7 +1865,7 @@ function cerrarModalDetalleGlobal() {
     <div class="modal-card" style="max-width:800px;max-height:90vh;overflow-y:auto;">
       <div id="tituloModal" class="modal-title">➕ Nuevo Tramo</div>
       <input type="hidden" id="formId" />
-      
+
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:20px 0;text-align:left;">
         <div class="field">
           <label>Fecha Inicio</label>
@@ -1794,7 +1908,7 @@ function cerrarModalDetalleGlobal() {
           <select id="formResponsable"></select>
         </div>
       </div>
-      
+
       <div class="modal-actions">
         <button class="btn-modal-cancel" onclick="cerrarModalTramo()">Cancelar</button>
         <button onclick="guardarTramo()">💾 Guardar</button>
@@ -1807,7 +1921,8 @@ function cerrarModalDetalleGlobal() {
     <div class="modal-card">
       <div class="modal-icon">⚠️</div>
       <div class="modal-title">Confirmar Eliminación</div>
-      <div class="modal-desc">¿Estás seguro de que deseas eliminar este tramo? <strong>Esta acción no se puede deshacer.</strong></div>
+      <div class="modal-desc">¿Estás seguro de que deseas eliminar este tramo? <strong>Esta acción no se puede
+          deshacer.</strong></div>
       <div class="modal-actions">
         <button class="btn-modal-cancel" onclick="cerrarModalConfirmar()">Cancelar</button>
         <button class="btn-modal-delete" onclick="eliminarTramoConfirmado()">🗑️ Eliminar</button>
@@ -1822,21 +1937,33 @@ function cerrarModalDetalleGlobal() {
       <button onclick="cerrarModalDetalle()" style="margin-top:20px;">Cerrar</button>
     </div>
   </div>
- 
- <!-- ========== MODAL DETALLE MENSUALIZADO GLOBAL (NUEVO) ========== -->
+
+  <!-- ========== MODAL DETALLE MENSUALIZADO GLOBAL (NUEVO) ========== -->
   <div id="modalDetalleGlobal" class="modal-overlay" style="display:none;">
-  <div class="modal-card" style="max-width:980px;max-height:90vh;overflow:auto;text-align:left;">
-    <div style="display:flex;align-items:center;gap:12px;justify-content:space-between;margin-bottom:14px;">
-      <div id="detalleGlobalTitle" style="font-size:18px;font-weight:700;color:var(--primary-dark);">
-        📅 Resumen Global
+    <div class="modal-card" style="max-width:980px;max-height:90vh;overflow:auto;text-align:left;">
+      <div style="display:flex;align-items:center;gap:12px;justify-content:space-between;margin-bottom:14px;">
+        <div id="detalleGlobalTitle" style="font-size:18px;font-weight:700;color:var(--primary-dark);">
+          📅 Resumen Global
+        </div>
+        <button class="btnSecondary" style="width:auto;padding:10px 14px;" onclick="cerrarModalDetalleGlobal()">✖
+          Cerrar</button>
       </div>
-      <button class="btnSecondary" style="width:auto;padding:10px 14px;" onclick="cerrarModalDetalleGlobal()">✖ Cerrar</button>
+
+      <div id="detalleGlobalContent"></div>
     </div>
-
-    <div id="detalleGlobalContent"></div>
   </div>
-</div>
 
+
+  <!-- ========== VISTA ACCESO DENEGADO ========== -->
+  <div id="vistaAccesoDenegado"
+    style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#ffffff;z-index:9999;flex-direction:column;align-items:center;justify-content:center;text-align:center;">
+    <div style="font-size:64px;margin-bottom:20px;">⛔</div>
+    <div style="font-size:24px;font-weight:700;color:var(--primary-dark);margin-bottom:10px;">Acceso Denegado</div>
+    <div id="msgDenegado" style="font-size:16px;color:var(--text-muted);max-width:400px;line-height:1.5;">
+      No tienes permiso para acceder a esta aplicación.
+    </div>
+  </div>
 
 </body>
+
 </html>
