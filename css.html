@@ -358,104 +358,6 @@
     letter-spacing: -0.3px; 
   }
 
-  .detail-card .sectionTitle {
-    font-size: 18px;
-    font-weight: 600;
-    letter-spacing: 0.1px;
-    text-transform: uppercase;
-    color: var(--primary);
-  }
-
-  /* --- DETALLE DE EMPLEADO --- */
-  .detail-shell {
-    display: grid;
-    gap: 28px;
-  }
-
-  .detail-hero {
-    padding: 24px 28px;
-    border-radius: 18px;
-    background: linear-gradient(135deg, rgba(0, 77, 103, 0.08), rgba(0, 168, 150, 0.06));
-    border: 1px solid rgba(0, 77, 103, 0.12);
-    box-shadow: 0 12px 30px rgba(0, 77, 103, 0.1);
-  }
-
-  .detail-eyebrow {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 1.2px;
-    color: var(--text-muted);
-    font-weight: 600;
-    margin-bottom: 8px;
-  }
-
-  .detail-name {
-    font-size: 28px;
-    font-weight: 600;
-    color: var(--primary-dark);
-    letter-spacing: -0.4px;
-  }
-
-  .detail-meta {
-    margin-top: 12px;
-    font-size: 13px;
-    color: var(--text-muted);
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    align-items: center;
-  }
-
-  .detail-meta-divider {
-    color: rgba(0, 77, 103, 0.35);
-    font-weight: 700;
-  }
-
-  .detail-section {
-    display: grid;
-    gap: 16px;
-  }
-
-  .detail-section-title {
-    font-size: 14px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    color: var(--primary);
-    padding-bottom: 10px;
-    border-bottom: 1px solid rgba(0, 77, 103, 0.12);
-  }
-
-  .detail-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 14px;
-  }
-
-  .detail-item {
-    background: rgba(255, 255, 255, 0.7);
-    border: 1px solid rgba(0, 77, 103, 0.08);
-    border-radius: 14px;
-    padding: 16px 18px;
-    display: grid;
-    gap: 6px;
-    min-height: 80px;
-  }
-
-  .detail-label {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    color: var(--text-muted);
-    font-weight: 600;
-  }
-
-  .detail-value {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text);
-    word-break: break-word;
-  }
 
   /* --- GRID KPI CARDS --- */
   .claude-grid { 
@@ -865,62 +767,104 @@
     font-size: 11px;
   }
 
-  /* --- DETALLES MENSUALES --- */
-  .detail-item { 
-    background: rgba(255, 255, 255, 0.6); 
-    border: 1px solid rgba(0, 77, 103, 0.08); 
-    border-radius: 12px; 
-    padding: 14px; 
-    margin-bottom: 10px; 
-    font-size: 13px;
-    backdrop-filter: blur(10px);
-    transition: all 0.2s ease;
+  /* --- DETALLE MENSUAL (MODAL) --- */
+  .detalle-mes-modal {
+    max-height: 520px;
+    overflow-y: auto;
+    display: grid;
+    gap: 16px;
+    padding-right: 4px;
   }
-  
-  .detail-item:hover {
+
+  .detalle-mes-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--primary);
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(0, 77, 103, 0.12);
+    margin: 0;
+  }
+
+  .detalle-mes-card {
     background: rgba(255, 255, 255, 0.75);
-    box-shadow: 0 4px 12px rgba(0, 77, 103, 0.08);
-    border-color: rgba(0, 77, 103, 0.12);
+    border: 1px solid rgba(0, 77, 103, 0.08);
+    border-radius: 14px;
+    padding: 16px 18px;
+    display: grid;
+    gap: 12px;
+    box-shadow: 0 4px 12px rgba(0, 77, 103, 0.06);
   }
-  
-  .detail-header { 
-    font-weight: 600; 
-    color: var(--primary); 
-    border-bottom: 1px solid rgba(0, 77, 103, 0.1); 
-    padding-bottom: 8px; 
-    margin-bottom: 10px; 
-    display: flex; 
+
+  .detalle-mes-card-header {
+    display: flex;
+    align-items: center;
     justify-content: space-between;
+    gap: 12px;
+    font-weight: 600;
+    color: var(--primary-dark);
+    border-bottom: 1px solid rgba(0, 77, 103, 0.08);
+    padding-bottom: 10px;
+  }
+
+  .detalle-mes-project {
     font-size: 14px;
   }
-  
-  .detail-grid { 
-    display: grid; 
-    grid-template-columns: 1fr 1fr; 
-    gap: 6px 16px; 
+
+  .detalle-mes-amount {
+    font-size: 14px;
+    color: var(--primary);
+    font-weight: 700;
+    white-space: nowrap;
   }
-  
-  .detail-row { 
-    font-size: 13px; 
+
+  .detalle-mes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 10px 16px;
   }
-  
-  .detail-row span { 
-    color: var(--text-muted); 
-    font-weight: 500; 
+
+  .detalle-mes-field {
+    display: grid;
+    gap: 4px;
+    font-size: 13px;
   }
-  
-  .detail-footer { 
-    margin-top: 10px; 
-    padding-top: 10px; 
-    border-top: 1px solid rgba(0, 77, 103, 0.08); 
-    display: flex; 
-    gap: 16px; 
-    font-family: 'SF Mono', 'Menlo', monospace; 
-    font-size: 12px; 
-    color: var(--primary-dark); 
-    background: rgba(0, 77, 103, 0.04); 
-    padding: 10px; 
-    border-radius: 8px;
+
+  .detalle-mes-field span {
+    color: var(--text-muted);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-size: 11px;
+  }
+
+  .detalle-mes-field strong {
+    color: var(--text);
+    font-weight: 600;
+    font-size: 13px;
+  }
+
+  .detalle-mes-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: rgba(0, 77, 103, 0.05);
+    font-size: 12px;
+    color: var(--primary-dark);
+  }
+
+  .detalle-mes-footer span {
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-size: 10px;
+    color: var(--text-muted);
+    display: block;
+    margin-bottom: 4px;
+  }
+
+  .detalle-mes-footer strong {
+    font-weight: 600;
   }
 
   /* --- TABLAS --- */

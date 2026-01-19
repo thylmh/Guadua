@@ -268,23 +268,16 @@
         return;
       }
       
-      var html = '<div class="detail-shell">';
-      html += '<div class="detail-hero">';
-      html += '<div class="detail-eyebrow">Trabajador</div>';
-      html += '<div class="detail-name">' + escapeHtml(emp.nombre || "Sin nombre") + '</div>';
-      var metaItems = [];
-      if (con.IDCONTRATO) metaItems.push('Contrato #' + escapeHtml(con.IDCONTRATO));
-      if (con.CARGO) metaItems.push(escapeHtml(con.CARGO));
-      if (con.POSICION) metaItems.push(escapeHtml(con.POSICION));
-      if (con.PLANTA) metaItems.push(escapeHtml(con.PLANTA));
-      if (metaItems.length) {
-        html += '<div class="detail-meta">' + metaItems.join('<span class="detail-meta-divider">•</span>') + '</div>';
-      }
+      // 🎨 NOMBRE COMO BANNER DESTACADO
+      var html = '<div style="background:linear-gradient(135deg,rgba(0,77,103,0.08) 0%,rgba(0,168,150,0.08) 100%);border-left:4px solid var(--primary);border-radius:12px;padding:20px 24px;margin-bottom:36px;backdrop-filter:blur(10px);box-shadow:0 4px 12px rgba(0,77,103,0.08);">';
+      html += '<div style="font-size:13px;color:var(--text-muted);font-weight:500;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Trabajador</div>';
+      html += '<div style="font-size:26px;font-weight:600;color:var(--primary-dark);letter-spacing:-0.4px;">' + escapeHtml(emp.nombre || "Sin nombre") + '</div>';
       html += '</div>';
       
-      html += '<div class="detail-section">';
-      html += '<div class="detail-section-title">Centro de costos</div>';
-      html += '<div class="detail-grid">';
+      // 📍 SECCIÓN: CENTRO DE COSTOS
+      html += '<div style="margin-bottom:32px;">';
+      html += '<div style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:16px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--border);padding-bottom:8px;">📍 Centro de Costos</div>';
+      html += '<div class="claude-grid">';
       
       var camposCentro = [
         {label:"DIRECCIÓN", valor:con.DIRECCION}
@@ -294,16 +287,17 @@
       if (con.SUBAREA) camposCentro.push({label:"SUBÁREA", valor:con.SUBAREA});
       
       camposCentro.forEach(function(c) {
-        html += '<div class="detail-item">';
-        html += '<div class="detail-label">' + c.label + '</div>';
-        html += '<div class="detail-value">' + escapeHtml(c.valor || "—") + '</div>';
+        html += '<div class="claude-card">';
+        html += '<div class="claude-label">' + c.label + '</div>';
+        html += '<div class="claude-value">' + escapeHtml(c.valor || "---") + '</div>';
         html += '</div>';
       });
       html += '</div></div>';
       
-      html += '<div class="detail-section">';
-      html += '<div class="detail-section-title">Información del contrato</div>';
-      html += '<div class="detail-grid">';
+      // 📄 SECCIÓN: INFORMACIÓN DEL CONTRATO
+      html += '<div style="margin-bottom:32px;">';
+      html += '<div style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:16px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--border);padding-bottom:8px;">📄 Información del Contrato</div>';
+      html += '<div class="claude-grid">';
       
       var camposContrato = [
         {label:"ID CONTRATO", valor:con.IDCONTRATO},
@@ -320,20 +314,21 @@
       ];
       
       camposContrato.forEach(function(c) {
-        var display = c.valor || "—";
+        var display = c.valor || "---";
         if (c.valor && c.tipo === "fecha") {
           display = formatDate(c.valor);
         }
-        html += '<div class="detail-item">';
-        html += '<div class="detail-label">' + c.label + '</div>';
-        html += '<div class="detail-value">' + escapeHtml(display) + '</div>';
+        html += '<div class="claude-card">';
+        html += '<div class="claude-label">' + c.label + '</div>';
+        html += '<div class="claude-value">' + escapeHtml(display) + '</div>';
         html += '</div>';
       });
       html += '</div></div>';
       
-      html += '<div class="detail-section">';
-      html += '<div class="detail-section-title">Carga salarial</div>';
-      html += '<div class="detail-grid">';
+      // 💰 SECCIÓN: CARGA SALARIAL
+      html += '<div style="margin-bottom:32px;">';
+      html += '<div style="font-size:16px;font-weight:600;color:var(--primary);margin-bottom:16px;text-transform:uppercase;letter-spacing:0.5px;border-bottom:2px solid var(--border);padding-bottom:8px;">💰 Carga Salarial</div>';
+      html += '<div class="claude-grid">';
       
       var camposSalarial = [
         {label:"SALARIO", valor:con.SALARIO, tipo:"moneda"},
@@ -342,7 +337,7 @@
       ];
       
       camposSalarial.forEach(function(c) {
-        var display = c.valor || "—";
+        var display = c.valor || "---";
         if (c.valor) {
           if (c.tipo === "moneda") {
             display = c.label === "SALARIO" ? maskMoney() : money(c.valor);
@@ -354,13 +349,12 @@
             }
           }
         }
-        html += '<div class="detail-item">';
-        html += '<div class="detail-label">' + c.label + '</div>';
-        html += '<div class="detail-value">' + display + '</div>';
+        html += '<div class="claude-card">';
+        html += '<div class="claude-label">' + c.label + '</div>';
+        html += '<div class="claude-value">' + display + '</div>';
         html += '</div>';
       });
       html += '</div></div>';
-      html += '</div>';
       
       box.innerHTML = html;
     }
@@ -1280,28 +1274,28 @@
       var mes = DATOS_ACTUAL.months.find(function(m) { return m.anioMes === anioMes; });
       if (!mes || !mes.detalle) return;
       
-      var html = '<div style="max-height:500px;overflow-y:auto;">';
-      html += '<h3 style="margin-top:0;color:var(--primary);border-bottom:2px solid var(--border);padding-bottom:12px;">' + formatMes(anioMes) + ' - Detalle Completo</h3>';
+      var html = '<div class="detalle-mes-modal">';
+      html += '<div class="detalle-mes-title">' + formatMes(anioMes) + ' · Detalle completo</div>';
       
       mes.detalle.forEach(function(d) {
-        html += '<div class="detail-item">';
-        html += '<div class="detail-header">';
-        html += '<span>' + escapeHtml(getName('proyectos', d.proyecto)) + '</span>';
-        html += '<span>' + money(d.valor) + '</span>';
+        html += '<div class="detalle-mes-card">';
+        html += '<div class="detalle-mes-card-header">';
+        html += '<div class="detalle-mes-project">' + escapeHtml(getName('proyectos', d.proyecto)) + '</div>';
+        html += '<div class="detalle-mes-amount">' + money(d.valor) + '</div>';
         html += '</div>';
-        html += '<div class="detail-grid">';
-        html += '<div class="detail-row"><span>🏷️ Rubro:</span> ' + escapeHtml(d.rubro || "---") + '</div>';
-        html += '<div class="detail-row"><span>📅 Días:</span> ' + d.dias + '</div>';
-        html += '<div class="detail-row"><span>💰 Fuente:</span> ' + escapeHtml(getName('fuentes', d.fuente)) + '</div>';
-        html += '<div class="detail-row"><span>📦 Componente:</span> ' + escapeHtml(getName('componentes', d.componente)) + '</div>';
-        html += '<div class="detail-row"><span>📋 Subcomponente:</span> ' + escapeHtml(getName('subcomponentes', d.subcomponente)) + '</div>';
-        html += '<div class="detail-row"><span>🏷️ Categoría:</span> ' + escapeHtml(getName('categorias', d.categoria)) + '</div>';
-        html += '<div class="detail-row"><span>👤 Responsable:</span> ' + escapeHtml(getName('responsables', d.responsable)) + '</div>';
-        html += '<div class="detail-row"><span>💵 Salario Mensual:</span> ' + maskMoney() + '</div>';
+        html += '<div class="detalle-mes-grid">';
+        html += '<div class="detalle-mes-field"><span>Rubro</span><strong>' + escapeHtml(d.rubro || "---") + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Días</span><strong>' + d.dias + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Fuente</span><strong>' + escapeHtml(getName('fuentes', d.fuente)) + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Componente</span><strong>' + escapeHtml(getName('componentes', d.componente)) + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Subcomponente</span><strong>' + escapeHtml(getName('subcomponentes', d.subcomponente)) + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Categoría</span><strong>' + escapeHtml(getName('categorias', d.categoria)) + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Responsable</span><strong>' + escapeHtml(getName('responsables', d.responsable)) + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Salario mensual</span><strong>' + maskMoney() + '</strong></div>';
         html += '</div>';
-        html += '<div class="detail-footer">';
-        html += '<div><strong>ID:</strong> ' + escapeHtml(d.id) + '</div>';
-        html += '<div><strong>Contrato:</strong> ' + escapeHtml(d.contrato || "---") + '</div>';
+        html += '<div class="detalle-mes-footer">';
+        html += '<div><span>ID</span><strong>' + escapeHtml(d.id) + '</strong></div>';
+        html += '<div><span>Contrato</span><strong>' + escapeHtml(d.contrato || "---") + '</strong></div>';
         html += '</div>';
         html += '</div>';
       });
@@ -1658,8 +1652,8 @@ function cerrarModalDetalleGlobal() {
       <!-- VISTA DETALLADA -->
       <div id="vistaDetallada">
         <!-- Datos del Empleado -->
-        <section id="secEmpleado" class="card detail-card" style="display:none;">
-          <div class="sectionTitle">Detalle del empleado</div>
+        <section id="secEmpleado" class="card" style="display:none;">
+          <div class="sectionTitle">👤 Datos del Empleado</div>
           <div id="kpiBox"></div>
           <div id="msgContrato" class="msg"></div>
         </section>
@@ -1667,7 +1661,7 @@ function cerrarModalDetalleGlobal() {
         <!-- Tramos -->
         <section id="secTramos" class="card" style="display:none;">
           <div class="header-actions">
-            <div class="sectionTitle">Tramos de financiación</div>
+            <div class="sectionTitle">📋 Tramos de Financiación</div>
             <button class="btnAdd" onclick="nuevoTramo()"><span>+</span> Nuevo Tramo</button>
           </div>
           <div class="tableWrap">
@@ -1693,7 +1687,7 @@ function cerrarModalDetalleGlobal() {
 
         <!-- Mensualizado -->
         <section id="secMensual" class="card" style="display:none;">
-          <div class="sectionTitle">Vista mensualizada</div>
+          <div class="sectionTitle">📅 Vista Mensualizada</div>
           <div class="tableWrap">
             <table id="tblMeses">
               <thead>
@@ -1710,7 +1704,7 @@ function cerrarModalDetalleGlobal() {
 
         <!-- Resumen -->
         <section id="secResumen" class="card" style="display:none;">
-          <div class="sectionTitle">Resumen general</div>
+          <div class="sectionTitle">📊 Resumen General</div>
           <div id="resumenBox"></div>
         </section>
       </div>
