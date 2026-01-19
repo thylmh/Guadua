@@ -12,6 +12,28 @@ function getAppSheetConfig_() {
   return { host, appId, key };
 }
 
+// ==================== SEGURIDAD ====================
+function getAllowedUsers_() {
+  const p = PropertiesService.getScriptProperties();
+  const raw = p.getProperty("ALLOWED_USERS") || "";
+  if (!raw) {
+    // Fallback de seguridad: al menos el admin/desarrollador debe poder entrar si la propiedad está vacía
+    // Opcional: Retornar lista vacía si prefieres bloquear todo: return [];
+    return ["aplicaciones@humboldt.org.co"]; 
+  }
+  return raw.split(",").map(e => e.trim()).filter(e => e !== "");
+}
+
+function checkAuth_() {
+  const email = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
+  if (!email) return; 
+
+  const allowed = getAllowedUsers_();
+  if (!allowed.includes(email)) {
+    throw new Error("⛔ ACCESO DENEGADO: No tienes permisos para usar esta aplicación (" + email + ")");
+  }
+}
+
 const CONFIG = {
   TABLES: {
     EMPLEADOS: "Activos",
@@ -249,6 +271,7 @@ function getMesMensualizadoCached_(anioMes, seconds) {
 function getVistaFinanciacion(params) {
   try {
     const { cedula = "" } = params || {};
+    checkAuth_(); // 🔒 SEGURIDAD
     const { TABLES, COLS } = CONFIG;
 
     if (!cedula.trim()) return { ok: false, message: "Debe proporcionar una cédula válida." };
@@ -434,6 +457,7 @@ function getTimestamp_() {
 
 function guardarTramoFinanciacion(datos) {
   try {
+    checkAuth_(); // 🔒 SEGURIDAD
     const { TABLES, COLS } = CONFIG;
     const { FIN } = COLS;
 
@@ -478,6 +502,7 @@ function guardarTramoFinanciacion(datos) {
 
 function eliminarTramoFinanciacion(id) {
   try {
+    checkAuth_(); // 🔒 SEGURIDAD
     const { TABLES, COLS } = CONFIG;
 
     const row = {};
@@ -497,12 +522,15 @@ function eliminarTramoFinanciacion(id) {
 
 
 function getLoggedUser() {
-  return { email: Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail() };
+  const email = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail();
+  const allowed = getAllowedUsers_();
+  return { email: email, authorized: allowed.includes(email) };
 }
 
 /***** DASHBOARD GLOBAL *****/
 function getDashboardGlobal() {
   try {
+    checkAuth_(); // 🔒 SEGURIDAD
     const cacheKey = "DASHBOARD_GLOBAL_V1";
     const cached = cacheGetJSON_(cacheKey);
     if (cached) return cached;
@@ -583,6 +611,7 @@ function getDashboardGlobal() {
 function getDashboardDetalleProyecto(params) {
   try {
     const { proyecto = "" } = params || {};
+    checkAuth_(); // 🔒 SEGURIDAD
     if (!proyecto) return { ok: false, message: "Debe indicar un proyecto." };
 
     const cacheKey = "DASHBOARD_DETALLE_PROYECTO_" + proyecto;
@@ -645,6 +674,7 @@ function getDashboardDetalleProyecto(params) {
 
 function getDashboardEmpleadosGlobal() {
   try {
+    checkAuth_(); // 🔒 SEGURIDAD
     const cacheKey = "DASHBOARD_EMPLEADOS_GLOBAL_V1";
     const cached = cacheGetJSON_(cacheKey);
     if (cached) return cached;
@@ -671,6 +701,7 @@ function getDashboardEmpleadosGlobal() {
         mapDireccionGerencia[cedula] = {
           direccion: con[COLS.CON.DIRECCION] || "Sin Dirección",
           gerencia: con[COLS.CON.GERENCIA] || "Sin Gerencia",
+          tplanta: con[COLS.CON.TPLANTA] || "Sin Tipo de Planta",
           fTerminacion: con[COLS.CON.F_TERMINACION] || "",
           prorrogas: con[COLS.CON.PRORROGAS] || 0
         };
@@ -701,6 +732,7 @@ function getDashboardEmpleadosGlobal() {
             cedula: cedula,
             direccion: infoContrato ? infoContrato.direccion : "Sin Dirección",
             gerencia: infoContrato ? infoContrato.gerencia : "Sin Gerencia",
+            tplanta: infoContrato ? infoContrato.tplanta : "Sin Tipo de Planta",
             fTerminacion: infoContrato ? infoContrato.fTerminacion : "",
             prorrogas: infoContrato ? infoContrato.prorrogas : 0,
             proyectos: new Set(),
@@ -723,6 +755,7 @@ function getDashboardEmpleadosGlobal() {
         cedula: item.cedula,
         direccion: item.direccion,
         gerencia: item.gerencia,
+        tplanta: item.tplanta,
         fTerminacion: item.fTerminacion,
         prorrogas: item.prorrogas,
         proyectos: Array.from(item.proyectos).sort(),
@@ -740,6 +773,7 @@ function getDashboardEmpleadosGlobal() {
 
 function getDashboardDireccionTotales() {
   try {
+    checkAuth_(); // 🔒 SEGURIDAD
     const cacheKey = "DASHBOARD_DIRECCION_V1";
     const cached = cacheGetJSON_(cacheKey);
     if (cached) return cached;
@@ -753,7 +787,10 @@ function getDashboardDireccionTotales() {
       if (!cedula) return;
       const direccion = con[COLS.CON.DIRECCION] || "Sin Dirección";
       if (direccion && String(con["Estado"] || "").toLowerCase().includes("activo")) {
-        mapDireccion[String(cedula)] = String(direccion);
+        mapDireccion[String(cedula)] = {
+          direccion: String(direccion),
+          tplanta: String(con[COLS.CON.TPLANTA] || "Sin Tipo de Planta")
+        };
       }
     });
 
@@ -771,17 +808,24 @@ function getDashboardDireccionTotales() {
         const tramo = mapTramos[String(d.id)];
         if (!tramo) return;
         const cedula = tramo[COLS.FIN.CEDULA];
-        const direccion = mapDireccion[String(cedula)] || "Sin Dirección";
+        const infoDireccion = mapDireccion[String(cedula)];
+        const direccion = infoDireccion ? infoDireccion.direccion : "Sin Dirección";
+        const tplanta = infoDireccion ? infoDireccion.tplanta : "Sin Tipo de Planta";
         if (!direccion || direccion === "Sin Dirección") return;
         const valor = Number(d.valor) || 0;
         totalGeneral += valor;
-        totalsByDireccion[direccion] = (totalsByDireccion[direccion] || 0) + valor;
+        if (!totalsByDireccion[direccion]) {
+          totalsByDireccion[direccion] = { total: 0, tipos: {} };
+        }
+        totalsByDireccion[direccion].total += valor;
+        totalsByDireccion[direccion].tipos[tplanta] = (totalsByDireccion[direccion].tipos[tplanta] || 0) + valor;
       });
     });
 
     const items = Object.keys(totalsByDireccion).map(dir => ({
       direccion: dir,
-      total: totalsByDireccion[dir]
+      total: totalsByDireccion[dir].total,
+      tipos: totalsByDireccion[dir].tipos
     })).sort((a, b) => b.total - a.total);
 
     const payload = { ok: true, data: { totalGeneral, items } };
