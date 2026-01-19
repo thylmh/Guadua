@@ -1022,9 +1022,14 @@
           tiposLista.forEach(function(tipo, idx) {
             var valor = Number(tipos[tipo]) || 0;
             if (!valor) return;
-            var segmentWidth = Math.max(2, (valor / totalLocal) * 100);
+            var porcentaje = (valor / totalLocal) * 100;
+            var segmentWidth = Math.max(2, porcentaje);
             var color = palette[idx % palette.length];
-            html += '<div class="direccion-segment" style="width:' + segmentWidth + '%;background:' + color + ';"></div>';
+            html += '<div class="direccion-segment" style="width:' + segmentWidth + '%;background:' + color + ';">';
+            if (porcentaje >= 8) {
+              html += '<span class="direccion-segment-label">' + porcentaje.toFixed(1) + '%</span>';
+            }
+            html += '</div>';
           });
         } else {
           html += '<div class="direccion-segment" style="width:100%;background:linear-gradient(135deg,var(--primary) 0%,var(--accent) 100%);"></div>';
