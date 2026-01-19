@@ -498,10 +498,14 @@ function eliminarTramoFinanciacion(id) {
 
 function getLoggedUser() {
   const context = getUserContext_();
+  const usingEffective = !context.activeEmail && !!context.effectiveEmail;
   return {
     email: context.activeEmail || "",
     effectiveEmail: context.effectiveEmail || "",
-    usingEffective: !context.activeEmail && !!context.effectiveEmail
+    usingEffective: usingEffective,
+    warning: usingEffective
+      ? "No se pudo obtener tu correo de sesión. Verifica el despliegue: Ejecutar como usuario que accede y acceso dentro del dominio."
+      : ""
   };
 }
 
@@ -801,5 +805,4 @@ function getResumenMesGlobal(anioMes) {
     return { ok: false, message: "Error en getResumenMesGlobal: " + e.toString() };
   }
 }
-
 

@@ -1193,6 +1193,11 @@
             }
           }
           document.getElementById("userEmail").textContent = label;
+          var hint = document.getElementById("userHint");
+          if (hint) {
+            hint.textContent = user.warning || "";
+            hint.style.display = user.warning ? "block" : "none";
+          }
         })
         .getLoggedUser();
       
@@ -1455,6 +1460,7 @@ function cerrarModalDetalleGlobal() {
       <div class="userbox">
         <div class="label">Usuario</div>
         <div id="userEmail" class="value">—</div>
+        <div id="userHint" class="hint" style="display:none;"></div>
       </div>
     </header>
 
