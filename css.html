@@ -64,13 +64,29 @@
   }
   
   .title { 
+    display: flex;
+    align-items: center;
+    gap: 12px;
     font-size: 28px; 
     font-weight: 600; 
+    letter-spacing: -0.5px; 
+  }
+
+  .title-logo {
+    width: 32px;
+    height: 32px;
+    display: inline-block;
+    background-color: var(--primary);
+    mask: url("https://cdn.prod.website-files.com/64bea006689ebc2d5d9499ad/67ac933f9b2b1323a3e61073_30-humboldt-negro.svg") no-repeat center / contain;
+    -webkit-mask: url("https://cdn.prod.website-files.com/64bea006689ebc2d5d9499ad/67ac933f9b2b1323a3e61073_30-humboldt-negro.svg") no-repeat center / contain;
+    flex-shrink: 0;
+  }
+
+  .title-text {
     background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
-    letter-spacing: -0.5px; 
   }
   
   .subtitle { 
