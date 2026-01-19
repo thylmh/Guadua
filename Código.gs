@@ -416,10 +416,16 @@ function getCatalogosFinanciacion() {
 }
 
 
+function getUserContext_() {
+  return {
+    activeEmail: Session.getActiveUser().getEmail(),
+    effectiveEmail: Session.getEffectiveUser().getEmail()
+  };
+}
+
 function getCurrentUser_() {
-  const email = Session.getActiveUser().getEmail() || 
-                Session.getEffectiveUser().getEmail();
-  return email || "Usuario Web Desconocido";
+  const context = getUserContext_();
+  return context.activeEmail || context.effectiveEmail || "Usuario Web Desconocido";
 }
 
 function getTimestamp_() {
@@ -491,7 +497,12 @@ function eliminarTramoFinanciacion(id) {
 
 
 function getLoggedUser() {
-  return { email: Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail() };
+  const context = getUserContext_();
+  return {
+    email: context.activeEmail || "",
+    effectiveEmail: context.effectiveEmail || "",
+    usingEffective: !context.activeEmail && !!context.effectiveEmail
+  };
 }
 
 /***** DASHBOARD GLOBAL *****/
@@ -790,6 +801,5 @@ function getResumenMesGlobal(anioMes) {
     return { ok: false, message: "Error en getResumenMesGlobal: " + e.toString() };
   }
 }
-
 
 

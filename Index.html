@@ -1184,7 +1184,15 @@
     window.onload = function() {
       google.script.run
         .withSuccessHandler(function(user) {
-          document.getElementById("userEmail").textContent = user.email || "Desconocido";
+          var label = user.email;
+          if (!label) {
+            if (user.effectiveEmail) {
+              label = user.effectiveEmail + " (ejecutor)";
+            } else {
+              label = "Desconocido";
+            }
+          }
+          document.getElementById("userEmail").textContent = label;
         })
         .getLoggedUser();
       
