@@ -785,17 +785,20 @@
       // Panel de Filtros
       var direccionesSet = new Set();
       var gerenciasSet = new Set();
+      var tiposPlantaSet = new Set();
       var prorrogasSet = new Set();
 
       nombresEmpleadosTodos.forEach(function(nombreEmpleado) {
         var emp = empleados[nombreEmpleado];
         if (emp.direccion) direccionesSet.add(emp.direccion);
         if (emp.gerencia) gerenciasSet.add(emp.gerencia);
+        if (emp.tplanta) tiposPlantaSet.add(emp.tplanta);
         if (emp.prorrogas !== undefined && emp.prorrogas !== null) prorrogasSet.add(emp.prorrogas);
       });
 
       var direcciones = Array.from(direccionesSet).sort();
       var gerencias = Array.from(gerenciasSet).sort();
+      var tiposPlanta = Array.from(tiposPlantaSet).sort();
       var prorrogasUnicas = Array.from(prorrogasSet).sort(function(a, b) { return a - b; });
 
       var html = '';
@@ -817,6 +820,15 @@
       html += '<option value="">Todas</option>';
       gerencias.forEach(function(g) {
         html += '<option value="' + escapeHtml(g) + '">' + escapeHtml(g) + '</option>';
+      });
+      html += '</select></div>';
+
+      html += '<div class="field">';
+      html += '<label style="font-size:11px;color:var(--text-muted);font-weight:600;margin-bottom:6px;display:block;">🏷️ Tipo de planta</label>';
+      html += '<select id="filtroTipoPlanta" onchange="aplicarFiltrosEmpleados()">';
+      html += '<option value="">Todas</option>';
+      tiposPlanta.forEach(function(t) {
+        html += '<option value="' + escapeHtml(t) + '">' + escapeHtml(t) + '</option>';
       });
       html += '</select></div>';
 
@@ -887,6 +899,7 @@
         html += 'data-proyectos="' + escapeHtml(proyectosStr).toLowerCase() + '" ';
         html += 'data-direccion="' + escapeHtml(datosEmpleado.direccion).toLowerCase() + '" ';
         html += 'data-gerencia="' + escapeHtml(datosEmpleado.gerencia).toLowerCase() + '" ';
+        html += 'data-tplanta="' + escapeHtml(datosEmpleado.tplanta || "").toLowerCase() + '" ';
         html += 'data-fterminacion="' + (datosEmpleado.fTerminacion || "") + '" ';
         html += 'data-prorrogas="' + (datosEmpleado.prorrogas || 0) + '">';
 
@@ -966,22 +979,74 @@
         return;
       }
 
-      var html = '<div style="display:grid;gap:12px;">';
+      var palette = ["#004D67", "#00A896", "#05668D", "#20A4F3", "#F4A261", "#E76F51", "#2A9D8F", "#8E9AAF"];
+      var tiposSet = new Set();
+      data.items.forEach(function(item) {
+        var tipos = item.tipos || {};
+        Object.keys(tipos).forEach(function(tipo) {
+          if (tipo) tiposSet.add(tipo);
+        });
+      });
+      var tiposLista = Array.from(tiposSet).sort();
+
+      var maxTotal = 0;
+      data.items.forEach(function(item) {
+        var total = Number(item.total) || 0;
+        if (total > maxTotal) maxTotal = total;
+      });
+      var logMax = Math.log10(maxTotal + 1) || 1;
+
+      var html = '<div class="direccion-chart">';
+      if (tiposLista.length) {
+        html += '<div class="direccion-legend">';
+        tiposLista.forEach(function(tipo, idx) {
+          var color = palette[idx % palette.length];
+          html += '<div class="direccion-legend-item">';
+          html += '<span class="direccion-dot" style="background:' + color + ';"></span>';
+          html += '<span>' + escapeHtml(tipo) + '</span>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      html += '<div class="direccion-bars">';
       data.items.forEach(function(item) {
         var total = Number(item.total) || 0;
         var pct = Math.round((total / totalGeneral) * 1000) / 10;
-        var barWidth = Math.max(2, Math.min(100, pct));
-        html += '<div style="display:grid;gap:6px;">';
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--text-muted);">';
+        var barWidth = Math.max(2, Math.min(100, (Math.log10(total + 1) / logMax) * 100));
+        var tipos = item.tipos || {};
+
+        html += '<div class="direccion-bar-row">';
+        html += '<div class="direccion-bar-header">';
         html += '<span>' + escapeHtml(item.direccion) + '</span>';
         html += '<span>' + moneyCompact(total) + ' · ' + pct.toFixed(1) + '%</span>';
         html += '</div>';
-        html += '<div style="height:8px;background:rgba(0,77,103,0.08);border-radius:8px;overflow:hidden;">';
-        html += '<div style="height:100%;width:' + barWidth + '%;background:linear-gradient(135deg,var(--primary) 0%,var(--accent) 100%);"></div>';
+        html += '<div class="direccion-bar-track">';
+        html += '<div class="direccion-bar" style="width:' + barWidth + '%;">';
+
+        if (tiposLista.length) {
+          var totalLocal = total || 1;
+          tiposLista.forEach(function(tipo, idx) {
+            var valor = Number(tipos[tipo]) || 0;
+            if (!valor) return;
+            var porcentaje = (valor / totalLocal) * 100;
+            var segmentWidth = Math.max(2, porcentaje);
+            var color = palette[idx % palette.length];
+            html += '<div class="direccion-segment" style="width:' + segmentWidth + '%;background:' + color + ';">';
+            if (porcentaje >= 8) {
+              html += '<span class="direccion-segment-label">' + porcentaje.toFixed(1) + '%</span>';
+            }
+            html += '</div>';
+          });
+        } else {
+          html += '<div class="direccion-segment" style="width:100%;background:linear-gradient(135deg,var(--primary) 0%,var(--accent) 100%);"></div>';
+        }
+
+        html += '</div>';
         html += '</div>';
         html += '</div>';
       });
-      html += '</div>';
+      html += '</div></div>';
       container.innerHTML = html;
     }
     
@@ -991,6 +1056,7 @@
       var filtroProyecto = (document.getElementById("filtroProyectoEmpleados")?.value || "").toLowerCase();
       var filtroDireccion = (document.getElementById("filtroDireccion")?.value || "").toLowerCase();
       var filtroGerencia = (document.getElementById("filtroGerencia")?.value || "").toLowerCase();
+      var filtroTipoPlanta = (document.getElementById("filtroTipoPlanta")?.value || "").toLowerCase();
       var filtroNombre = (document.getElementById("filtroNombreEmpleado")?.value || "").toLowerCase();
       var filtroDesde = document.getElementById("filtroFechaDesde")?.value || "";
       var filtroHasta = document.getElementById("filtroFechaHasta")?.value || "";
@@ -1024,6 +1090,7 @@
         var proyectos = fila.getAttribute("data-proyectos");
         var direccion = fila.getAttribute("data-direccion");
         var gerencia = fila.getAttribute("data-gerencia");
+        var tipoPlanta = fila.getAttribute("data-tplanta");
         var fterminacion = fila.getAttribute("data-fterminacion");
         var prorrogas = fila.getAttribute("data-prorrogas");
         
@@ -1032,6 +1099,7 @@
         if (filtroProyecto && proyectos.indexOf(filtroProyecto) === -1) mostrar = false;
         if (filtroDireccion && direccion !== filtroDireccion) mostrar = false;
         if (filtroGerencia && gerencia !== filtroGerencia) mostrar = false;
+        if (filtroTipoPlanta && tipoPlanta !== filtroTipoPlanta) mostrar = false;
         if (filtroNombre && empleado.indexOf(filtroNombre) === -1) mostrar = false;
         if (filtroProrrogas && prorrogas !== filtroProrrogas) mostrar = false;
         
@@ -1114,6 +1182,7 @@
       var filtroProyecto = document.getElementById("filtroProyectoEmpleados");
       var filtroDireccion = document.getElementById("filtroDireccion");
       var filtroGerencia = document.getElementById("filtroGerencia");
+      var filtroTipoPlanta = document.getElementById("filtroTipoPlanta");
       var filtroNombre = document.getElementById("filtroNombreEmpleado");
       var filtroDesde = document.getElementById("filtroFechaDesde");
       var filtroHasta = document.getElementById("filtroFechaHasta");
@@ -1124,6 +1193,7 @@
       if (filtroProyecto) filtroProyecto.value = "";
       if (filtroDireccion) filtroDireccion.value = "";
       if (filtroGerencia) filtroGerencia.value = "";
+      if (filtroTipoPlanta) filtroTipoPlanta.value = "";
       if (filtroNombre) filtroNombre.value = "";
       if (filtroDesde) filtroDesde.value = "";
       if (filtroHasta) filtroHasta.value = "";
@@ -1274,28 +1344,28 @@
       var mes = DATOS_ACTUAL.months.find(function(m) { return m.anioMes === anioMes; });
       if (!mes || !mes.detalle) return;
       
-      var html = '<div style="max-height:500px;overflow-y:auto;">';
-      html += '<h3 style="margin-top:0;color:var(--primary);border-bottom:2px solid var(--border);padding-bottom:12px;">' + formatMes(anioMes) + ' - Detalle Completo</h3>';
+      var html = '<div class="detalle-mes-modal">';
+      html += '<div class="detalle-mes-title">' + formatMes(anioMes) + ' · Detalle completo</div>';
       
       mes.detalle.forEach(function(d) {
-        html += '<div class="detail-item">';
-        html += '<div class="detail-header">';
-        html += '<span>' + escapeHtml(getName('proyectos', d.proyecto)) + '</span>';
-        html += '<span>' + money(d.valor) + '</span>';
+        html += '<div class="detalle-mes-card">';
+        html += '<div class="detalle-mes-card-header">';
+        html += '<div class="detalle-mes-project">' + escapeHtml(getName('proyectos', d.proyecto)) + '</div>';
+        html += '<div class="detalle-mes-amount">' + money(d.valor) + '</div>';
         html += '</div>';
-        html += '<div class="detail-grid">';
-        html += '<div class="detail-row"><span>🏷️ Rubro:</span> ' + escapeHtml(d.rubro || "---") + '</div>';
-        html += '<div class="detail-row"><span>📅 Días:</span> ' + d.dias + '</div>';
-        html += '<div class="detail-row"><span>💰 Fuente:</span> ' + escapeHtml(getName('fuentes', d.fuente)) + '</div>';
-        html += '<div class="detail-row"><span>📦 Componente:</span> ' + escapeHtml(getName('componentes', d.componente)) + '</div>';
-        html += '<div class="detail-row"><span>📋 Subcomponente:</span> ' + escapeHtml(getName('subcomponentes', d.subcomponente)) + '</div>';
-        html += '<div class="detail-row"><span>🏷️ Categoría:</span> ' + escapeHtml(getName('categorias', d.categoria)) + '</div>';
-        html += '<div class="detail-row"><span>👤 Responsable:</span> ' + escapeHtml(getName('responsables', d.responsable)) + '</div>';
-        html += '<div class="detail-row"><span>💵 Salario Mensual:</span> ' + maskMoney() + '</div>';
+        html += '<div class="detalle-mes-grid">';
+        html += '<div class="detalle-mes-field"><span>Días:</span><strong>' + d.dias + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Salario mensual:</span><strong>' + maskMoney() + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Rubro:</span><strong>' + escapeHtml(d.rubro || "---") + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Fuente:</span><strong>' + escapeHtml(getName('fuentes', d.fuente)) + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Componente:</span><strong>' + escapeHtml(getName('componentes', d.componente)) + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Subcomponente:</span><strong>' + escapeHtml(getName('subcomponentes', d.subcomponente)) + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Categoría:</span><strong>' + escapeHtml(getName('categorias', d.categoria)) + '</strong></div>';
+        html += '<div class="detalle-mes-field"><span>Responsable:</span><strong>' + escapeHtml(getName('responsables', d.responsable)) + '</strong></div>';
         html += '</div>';
-        html += '<div class="detail-footer">';
-        html += '<div><strong>ID:</strong> ' + escapeHtml(d.id) + '</div>';
-        html += '<div><strong>Contrato:</strong> ' + escapeHtml(d.contrato || "---") + '</div>';
+        html += '<div class="detalle-mes-footer">';
+        html += '<div><span>ID</span><strong>' + escapeHtml(d.id) + '</strong></div>';
+        html += '<div><span>Contrato</span><strong>' + escapeHtml(d.contrato || "---") + '</strong></div>';
         html += '</div>';
         html += '</div>';
       });
@@ -1590,7 +1660,7 @@ function cerrarModalDetalleGlobal() {
 <div id="paginaInicio">
   <section class="card">
     <div style="text-align:center;padding:40px 20px;">
-      <div style="font-size:48px;margin-bottom:20px;">🎋</div>
+      <img src="https://lh3.googleusercontent.com/d/10RKUle7zUMB361HeRMELUwSTsfZKYGO-" alt="Guadua" style="width:64px;height:64px;object-fit:contain;margin-bottom:20px;" onerror="this.onerror=null;this.src='https://drive.google.com/uc?export=view&id=10RKUle7zUMB361HeRMELUwSTsfZKYGO-';" />
       <h2 style="font-size:28px;font-weight:600;color:var(--primary);margin-bottom:12px;">Bienvenido a Guadua</h2>
       <p style="color:var(--text-muted);font-size:16px;max-width:600px;margin:0 auto 40px;">
         Sistema integral de planeación y gestión de nómina del Instituto Humboldt
