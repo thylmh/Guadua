@@ -1,4 +1,4 @@
-# 🌳 GUADUA ERP — Inteligencia de Nómina
+# 🌳 GUADUA — Inteligencia de Nómina
 
 **Guadua** es una plataforma integral de gestión de nómina y talento humano diseñada para el Instituto Alexander von Humboldt. Su objetivo es centralizar la proyección presupuestal, la conciliación de liquidaciones y la gestión estratégica de vacantes en una interfaz moderna y eficiente.
 
