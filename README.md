@@ -131,4 +131,4 @@ El diseño sigue el **[BOSQUE_DESIGN_SPEC.md] (No incluido en seed, referencia i
 ---
 
 © 2026 Instituto de Investigación de Recursos Biológicos Alexander von Humboldt.
-*Desarrollado para la Dirección de Talento Humano.*
+*Desarrollado para la DIFA.*
