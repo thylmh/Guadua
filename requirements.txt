@@ -1,0 +1,11 @@
+pandas
+sqlalchemy
+pymysql
+pyodbc
+cryptography
+cloud-sql-python-connector[pymysql]
+fastapi
+uvicorn
+google-auth
+pydantic
+requests

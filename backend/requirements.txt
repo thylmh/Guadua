@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+sqlalchemy
+pymysql
+pydantic
+pydantic-settings
+cloud-sql-python-connector
+google-auth
+google-api-python-client
+requests
+pyyaml
+pandas
+openpyxl
+pyodbc
+cryptography
+python-multipart

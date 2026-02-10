@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GUADUA - Inteligencia de Nómina</title>
+    <link rel="icon"
+        href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌳</text></svg>">
+
+    <link rel="stylesheet" href="css/styles.css">
+
+    <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div id="app">
+        <!-- Global Loader (Premium Edition) -->
+        <div id="loader" class="hidden"
+            style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(20px);">
+
+            <!-- Logo with Fluid Gradient Mask -->
+            <div class="loader-logo-container">
+                <div class="loader-logo-fluid"></div>
+            </div>
+
+            <h2 class="guadua-animate"
+                style="font-size: 24px; font-weight: 900; margin-bottom: 8px; letter-spacing: 0.1em; text-transform: uppercase;">
+                GUADUA</h2>
+
+            <div
+                style="width: 200px; height: 2px; background: #E2E8F0; border-radius: 4px; overflow: hidden; margin-bottom: 16px;">
+                <div
+                    style="height: 100%; width: 50%; background: #0F172A; animation: slide-loading 1.5s infinite ease-in-out; border-radius: 4px;">
+                </div>
+            </div>
+
+            <p id="loader-msg"
+                style="color: #64748B; font-size: 13px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.1em;">
+                Cargando Sistema...</p>
+        </div>
+
+        <style>
+            .loader-logo-container {
+                width: 250px;
+                height: 100px;
+                margin-bottom: 32px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .loader-logo-fluid {
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(-45deg, #004D67, #10B981, #3B82F6, #004D67);
+                background-size: 300% 300%;
+                -webkit-mask-image: url("https://cdn.prod.website-files.com/64bea006689ebc2d5d9499ad/65832356e8b3b761ff6baaec_Logo%20Humboldt%20Negro.svg");
+                mask-image: url("https://cdn.prod.website-files.com/64bea006689ebc2d5d9499ad/65832356e8b3b761ff6baaec_Logo%20Humboldt%20Negro.svg");
+                -webkit-mask-size: contain;
+                mask-size: contain;
+                -webkit-mask-repeat: no-repeat;
+                mask-repeat: no-repeat;
+                -webkit-mask-position: center;
+                mask-position: center;
+                animation: fluid-color 4s infinite ease-in-out;
+            }
+
+            @keyframes fluid-color {
+                0% {
+                    background-position: 0% 50%;
+                }
+
+                50% {
+                    background-position: 100% 50%;
+                }
+
+                100% {
+                    background-position: 0% 50%;
+                }
+            }
+
+            @keyframes slide-loading {
+                0% {
+                    transform: translateX(-100%);
+                    width: 20%;
+                }
+
+                50% {
+                    width: 60%;
+                }
+
+                100% {
+                    transform: translateX(200%);
+                    width: 20%;
+                }
+            }
+
+            .guadua-animate {
+                background: linear-gradient(-45deg, #004D67, #10B981, #3B82F6, #004D67);
+                background-size: 300% 300%;
+                -webkit-background-clip: text;
+                background-clip: text;
+                -webkit-text-fill-color: transparent;
+                animation: fluid-color 4s infinite ease-in-out;
+            }
+        </style>
+
+        <!-- Login View -->
+        <div id="login-view" class="hidden"
+            style="max-width: 440px; margin: 12vh auto; text-align: center; padding: 48px; background: white; border-radius: 32px; border: 1px solid #F1F5F9; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.05);">
+            <img src="https://cdn.prod.website-files.com/64bea006689ebc2d5d9499ad/65832356e8b3b761ff6baaec_Logo%20Humboldt%20Negro.svg"
+                alt="Logo Humboldt" style="height: 85px; margin-bottom: 32px;">
+            <h1 class="guadua-animate"
+                style="font-size: 36px; font-weight: 900; letter-spacing: 0.15em; margin-bottom: 12px; text-transform: uppercase;">
+                GUADUA</h1>
+            <p
+                style="color: #64748B; font-size: 14px; margin-bottom: 40px; font-weight: 500; line-height: 1.5; max-width: 320px; margin-left: auto; margin-right: auto;">
+                Herramienta sustentada en bases sólidas que permite articular la planeación de la nómina del Instituto
+            </p>
+
+            <div id="google-login-btn" style="display: flex; justify-content: center; margin-bottom: 24px;"></div>
+
+            <div id="dev-access-container" class="hidden">
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;">
+                    <div style="flex: 1; height: 1px; background: #F1F5F9;"></div>
+                    <div
+                        style="color: #94A3B8; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em;">
+                        Acceso Alternativo</div>
+                    <div style="flex: 1; height: 1px; background: #F1F5F9;"></div>
+                </div>
+
+                <button id="dev-login-btn" class="btn btn-ghost"
+                    style="width: 100%; justify-content: center; height: 48px; border-radius: 14px; border: 1px solid #E2E8F0; font-weight: 700; color: #475569;">
+                    Iniciar Modo Desarrollador
+                </button>
+            </div>
+            <p style="margin-top: 32px; font-size: 11px; color: #94A3B8; line-height: 1.5;">© 2026 Instituto Alexander
+                von Humboldt. <br> Inteligencia de Datos para la Conservación.</p>
+        </div>
+
+        <!-- Authenticated Layout -->
+        <div id="main-layout" class="hidden">
+            <header class="topbar">
+                <div class="flex align-center gap-4">
+                    <span class="brand-text">
+                        <img src="https://cdn.prod.website-files.com/64bea006689ebc2d5d9499ad/65832356e8b3b761ff6baaec_Logo%20Humboldt%20Negro.svg"
+                            alt="Logo Humboldt" style="height: 45px;">
+                        <span
+                            style="color: #0F172A; font-weight: 800; border-left: 2px solid #E2E8F0; padding-left: 10px; margin-left: 2px;">GUADUA</span>
+                    </span>
+                    <nav class="nav-links">
+                        <a href="#/home" class="tab-btn">Index</a>
+                        <a href="#/consulta" class="tab-btn">Consulta</a>
+                        <a href="#/dashboard" class="tab-btn">Dashboard</a>
+                        <a href="#/financiero" class="tab-btn financiero-access talento-access hidden">Financiero</a>
+                        <a href="#/vacantes" class="tab-btn talento-access hidden">Vacantes</a>
+                        <a href="#/solicitudes" class="tab-btn">Solicitudes</a>
+                        <a href="#/nomina" class="tab-btn financiero-access admin-only nomina-access hidden">Nómina</a>
+
+                        <a href="#/admin" class="tab-btn admin-only hidden">Administración</a>
+                        <a href="#/auditoria" class="tab-btn admin-only hidden">Bitácora</a>
+                    </nav>
+                </div>
+                <div class="flex align-center gap-4">
+                    <!-- Notification Bell -->
+                    <div id="notif-wrapper" style="cursor: pointer; position: relative; margin-right: 8px;">
+                        <span style="font-size: 20px;">🔔</span>
+                        <span id="notif-badge" class="hidden"
+                            style="position: absolute; top: -5px; right: -5px; background: #EF4444; color: white; font-size: 9px; font-weight: 900; padding: 2px 4px; border-radius: 50px; border: 2px solid white; line-height: 1;">0</span>
+                    </div>
+
+                    <div class="text-right" style="margin-right: 12px;">
+                        <div id="user-name" style="font-weight: 700; color: #0F172A; font-size: 14px;">Usuario</div>
+                        <div id="header-role"
+                            style="font-size: 9px; color: #64748B; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em;">
+                            Servidor</div>
+                    </div>
+                    <button id="logout-btn" class="btn btn-ghost"
+                        style="padding: 8px 16px; border: 1px solid #E2E8F0; border-radius: 12px; font-weight: 700; color: #475569;">Cerrar
+                        Sesión</button>
+                </div>
+            </header>
+
+            <main id="view-container">
+                <!-- 1. HOME VIEW (Premium Intelligence Edition) -->
+                <section id="home-view" class="view hidden">
+                    <div style="padding: 40px 20px; text-align: center; max-width: 900px; margin: 0 auto;">
+                        <div class="hero-badge"
+                            style="display: inline-block; padding: 6px 16px; background: #EFF6FF; color: #3B82F6; border-radius: 20px; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 24px; border: 1px solid #DBEAFE;">
+                            ✨ Plataforma Estratégica 2026
+                        </div>
+                        <h1 id="hero-welcome-msg"
+                            style="font-size: 48px; font-weight: 800; color: #0F172A; letter-spacing: -0.04em; margin-bottom: 16px; line-height: 1.1;">
+                            ¡Bienvenido a <span
+                                style="background: linear-gradient(135deg, #3B82F6 0%, #10B981 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">Guadua</span>,
+                            <span id="hero-user-name">...</span> !
+                        </h1>
+                        <p
+                            style="color: #64748B; font-size: 18px; max-width: 650px; margin: 0 auto 40px auto; line-height: 1.6;">
+                            Herramienta sustentada en bases sólidas que permite articular la planeación de la nómina del
+                            Instituto.
+                        </p>
+                        <div id="hero-date"
+                            style="font-size: 13px; font-weight: 600; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.05em;">
+                            Cargando fecha...</div>
+                    </div>
+
+                    <div class="luxury-grid">
+                        <!-- Card 1: Consulta -->
+                        <div class="action-card" onclick="window.location.hash='#/consulta'">
+                            <div class="card-icon">🔍</div>
+                            <h3>Consulta Individual</h3>
+                            <p>Gestione cada colaborador, sus tramos de financiación y proyecciones de liquidación
+                                mensual.</p>
+                            <div class="card-cta">Navegar a Consulta <span>→</span></div>
+                        </div>
+
+                        <!-- Card 2: Dashboard (Hero) -->
+                        <div class="action-card primary" onclick="window.location.hash='#/dashboard'">
+                            <div class="card-icon">📊</div>
+                            <h3>Dashboard Global</h3>
+                            <p>Visión estratégica de toda la institución: costos proyectados, distribución y alertas
+                                críticas.</p>
+                            <div class="card-cta">Ver Inteligencia <span>→</span></div>
+                        </div>
+
+                        <!-- Card 3: Financiero -->
+                        <div class="action-card financiero-access talento-access hidden"
+                            onclick="window.location.hash='#/financiero'">
+                            <div class="card-icon">📈</div>
+                            <h3>Análisis Financiero</h3>
+                            <p>Herramientas de proyección de flujo de caja y ejecución presupuestal global.</p>
+                            <div class="card-cta">Gestionar Recursos <span>→</span></div>
+                        </div>
+
+                        <!-- Card 4: Solicitudes -->
+                        <div class="action-card" onclick="window.location.hash='#/solicitudes'">
+                            <div class="card-icon">📝</div>
+                            <h3>Aprobación de Cambios</h3>
+                            <p>Auditoría y aprobación de modificaciones presupuestales y novedades de tramos.</p>
+                            <div class="card-cta">Revisar Solicitudes <span>→</span></div>
+                        </div>
+
+                        <!-- Card 5: Nómina -->
+                        <div class="action-card financiero-access admin-only nomina-access hidden"
+                            onclick="window.location.hash='#/nomina'">
+                            <div class="card-icon">📦</div>
+                            <h3>Carga de Nómina</h3>
+                            <p>Registro mensual de liquidaciones procesadas en el sistema Novasoft para conciliación.
+                            </p>
+                            <div class="card-cta">Cargar Archivo <span>→</span></div>
+                        </div>
+
+                        <!-- Card 6: Vacantes -->
+                        <div class="action-card talento-access hidden" onclick="window.location.hash='#/vacantes'">
+                            <div class="card-icon">🏢</div>
+                            <h3>Gestión de Vacantes</h3>
+                            <p>Consulte las posiciones disponibles, sus perfiles y proyecte el impacto de nuevas
+                                contrataciones.</p>
+                            <div class="card-cta">Ver Vacantes <span>→</span></div>
+                        </div>
+
+                        <!-- Card 7: Administración -->
+                        <div class="action-card admin-only hidden" onclick="window.location.hash='#/admin'">
+                            <div class="card-icon">⚙️</div>
+                            <h3>Administración</h3>
+                            <p>Configure el motor de cálculos, gestione usuarios autorizados y controle parámetros
+                                clave.</p>
+                            <div class="card-cta">Configurar Sistema <span>→</span></div>
+                        </div>
+
+                        <!-- Card 8: Auditoría -->
+                        <div class="action-card admin-only hidden" onclick="window.location.hash='#/auditoria'">
+                            <div class="card-icon">🛡️</div>
+                            <h3>Auditoría Total</h3>
+                            <p>Bitácora inmutable de seguridad, cambios en tramos y acciones de usuarios
+                                administrativos.</p>
+                            <div class="card-cta">Ver Logs <span>→</span></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 2. CONSULTA VIEW -->
+                <section id="consulta-view" class="view hidden">
+                    <div class="luxury-card mb-4" style="padding: 24px;">
+                        <div class="flex gap-4 align-center">
+                            <div style="flex: 1;">
+                                <label
+                                    style="font-size: 11px; font-weight: 700; color: var(--text-muted); display: block; margin-bottom: 8px; text-transform: uppercase;">Trabajador</label>
+                                <input type="text" id="search-cedula" placeholder="Ingrese número de identificación..."
+                                    style="width: 100%;">
+                            </div>
+                            <button id="btn-search" class="btn btn-primary" style="margin-top: 20px;">🔍 Buscar en Base
+                                de Datos</button>
+                        </div>
+                    </div>
+                    <div id="employee-profile-container"></div>
+                </section>
+
+                <!-- 3. DASHBOARD VIEW -->
+                <section id="dashboard-view" class="view hidden">
+                    <div class="kpi-grid">
+                        <div class="luxury-card impact-card">
+                            <div class="impact-label">Inversión Nómina</div>
+                            <div class="impact-value" id="kpi-total">$--</div>
+                        </div>
+                        <div class="luxury-card impact-card"
+                            style="background: linear-gradient(135deg, var(--accent) 0%, var(--accent-warm) 100%);">
+                            <div class="impact-label">Servidores</div>
+                            <div class="impact-value" id="kpi-servidores">--</div>
+                        </div>
+                        <div class="luxury-card impact-card"
+                            style="background: linear-gradient(135deg, var(--primary) 0%, #20A4F3 100%);">
+                            <div class="impact-label">Proyectos</div>
+                            <div class="impact-value" id="kpi-proyectos">--</div>
+                        </div>
+                    </div>
+
+                    <div class="luxury-grid">
+                        <div class="luxury-card span-6">
+                            <h3 class="mb-4">Distribución por Dirección</h3>
+                            <div id="direction-matrix"></div>
+                        </div>
+                        <div class="luxury-card span-6">
+                            <h3 class="mb-4">Top Proyectos Financiadores</h3>
+                            <div class="table-wrap">
+                                <table id="project-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Proyecto</th>
+                                            <th class="text-right">Monto</th>
+                                            <th>%</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 3.5. FINANCIERO VIEW -->
+                <section id="financiero-view" class="view hidden"></section>
+
+                <section id="solicitudes-view" class="view hidden">
+                    <div id="solicitudes-container" class="luxury-card"></div>
+                </section>
+
+                <!-- 4. ADMIN VIEW -->
+                <section id="admin-view" class="view hidden">
+                    <div class="luxury-card">
+                        <div class="flex gap-4 mb-4 border-bottom pb-4">
+                            <button class="tab-link active" data-tab="whitelist">Usuarios</button>
+                            <button class="tab-link" data-tab="incrementos">Incrementos</button>
+                        </div>
+                        <div id="admin-module-container"></div>
+                    </div>
+                </section>
+
+                <!-- Vacantes View -->
+                <section id="vacantes-view" class="view hidden">
+                    <div class="luxury-card mb-4">
+                        <div class="flex justify-between align-center mb-6">
+                            <div>
+                                <div class="flex align-center gap-4 mb-2">
+                                    <h1
+                                        style="font-size: 28px; font-weight: 800; color: var(--primary-dark); margin-bottom: 0;">
+                                        🏢 Gestión de Vacantes</h1>
+                                    <button id="btn-nueva-posicion" class="btn btn-primary admin-only hidden"
+                                        style="background: var(--primary); font-weight: 700; padding: 8px 16px; font-size: 14px;">+
+                                        Nueva Posición</button>
+                                </div>
+                                <p class="text-muted">Posiciones institucionales sin contrato activo asignado.</p>
+                            </div>
+                            <div id="vacante-kpi" style="text-align: right;">
+                                <div style="font-size: 24px; font-weight: 900; color: var(--accent);"
+                                    id="vacante-count">0</div>
+                                <div
+                                    style="font-size: 10px; text-transform: uppercase; font-weight: 700; opacity: 0.6;">
+                                    Vacantes Totales</div>
+                            </div>
+                        </div>
+
+                        <div class="flex gap-4 mb-8"
+                            style="background: #F8FAFC; padding: 20px; border-radius: 16px; border: 1px solid #E2E8F0;">
+                            <div style="flex: 1; position: relative;">
+                                <span
+                                    style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); opacity: 0.4;">🔍</span>
+                                <input type="text" id="vacante-search-input"
+                                    placeholder="Buscar por Cargo, Área o ID de Posición..." class="input"
+                                    style="width: 100%; padding-left: 40px; border-radius: 12px;">
+                            </div>
+                        </div>
+
+                        <div id="vacantes-list-container">
+                            <!-- Table will be rendered here -->
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Nómina View -->
+                <section id="nomina-view" class="view hidden">
+                    <div id="nomina-container"></div>
+                </section>
+
+
+                <!-- 8. AUDIT VIEW -->
+                <section id="auditoria-view" class="view hidden">
+                    <div id="auditoria-module-container"></div>
+                </section>
+            </main>
+        </div>
+
+        <!-- Global Modals -->
+        <div id="modal-container" class="modal-overlay hidden">
+            <div class="modal-content">
+                <div class="flex justify-between align-center mb-4">
+                    <h2 id="modal-title">Título del Modal</h2>
+                    <button id="modal-close" class="btn btn-ghost" style="padding: 8px;">✕</button>
+                </div>
+                <div id="modal-body"></div>
+            </div>
+        </div>
+
+        <!-- Quick Alerts (Small Modals) -->
+        <div id="quick-alert" class="modal-overlay hidden" style="z-index: 10001; background: rgba(0,0,0,0.4);">
+            <div class="luxury-card" style="max-width: 380px; margin: 30vh auto; padding: 24px; text-align: center;">
+                <div id="alert-icon" style="font-size: 40px; margin-bottom: 16px;">⚠️</div>
+                <h3 id="alert-title" class="mb-2">Alerta</h3>
+                <p id="alert-message" class="text-muted mb-4" style="font-size: 14px;"></p>
+                <div class="flex gap-2" id="alert-actions">
+                    <!-- Dynamic Buttons -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Scripts -->
+        <script type="module" src="js/main.js?v=2.5"></script>
+
+        <!-- Toast Container -->
+        <div id="toast-container"></div>
+    </div>
+</body>
+
+</html>
