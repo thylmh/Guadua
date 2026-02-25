@@ -29,14 +29,10 @@ async def get_current_user(
     authorization: Optional[str] = Header(default=None, alias="Authorization"),
 ) -> Dict[str, Any]:
     # Bypass for local development
-    # Bypass for local development
     if not authorization or authorization in ["Bearer undefined", "Bearer null", "Bearer local"]:
         # Try to connect to DB to verify we are actually online
         try:
             with engine.connect() as conn:
-                # If connected, enforce real auth OR return a specific local db user if needed
-                # For now, let's allow 'local_debug' only if we can't really validate token but DB is up
-                # Or better: if local dev, use the hardcoded admin but LOG it.
                 pass
         except Exception:
              # DB Down -> Only then return Mock
@@ -70,8 +66,24 @@ async def get_current_user(
         q = text("SELECT role FROM BWhitelist WHERE email = :email LIMIT 1")
         row = conn.execute(q, {"email": email}).fetchone()
         
-        q_name = text("SELECT p_nombre, p_apellido FROM BData WHERE correo_electronico = :email LIMIT 1")
+        # Priorizar persona con contrato ACTIVO en caso de email duplicado en BData
+        q_name = text("""
+            SELECT d.p_nombre, d.p_apellido
+            FROM BData d
+            JOIN BContrato c ON d.cedula = c.cedula
+            WHERE d.correo_electronico = :email
+              AND c.estado LIKE 'Activo%'
+            ORDER BY c.fecha_ingreso DESC
+            LIMIT 1
+        """)
         row_name = conn.execute(q_name, {"email": email}).fetchone()
+
+        # Fallback: si no hay contrato activo con ese email, usar cualquier registro de BData
+        if not row_name:
+            q_name_fallback = text(
+                "SELECT p_nombre, p_apellido FROM BData WHERE correo_electronico = :email LIMIT 1"
+            )
+            row_name = conn.execute(q_name_fallback, {"email": email}).fetchone()
 
     if not row:
         raise HTTPException(
