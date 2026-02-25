@@ -273,6 +273,7 @@ def mensualizar_base_30_optimized(tramos: List[Dict[str, Any]], incrementos: Dic
                         "contrato": row.get('id_contrato'),
                         "Planta": row.get('Planta'),
                         "Base_Fuente": row.get('Base_Fuente'),
+                        "Tipo_planta": row.get('Tipo_planta'),
                         "Direccion": row.get('Direccion'),
                         "Estado": row.get('estado'),
                         

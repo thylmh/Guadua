@@ -200,6 +200,18 @@ export const reporte = {
                         <label>Proyecto</label>
                         <div id="rep-proyecto" class="multi-select-custom"></div>
                     </div>
+                    <div class="filter-group">
+                        <label>Planta</label>
+                        <div id="rep-planta" class="multi-select-custom"></div>
+                    </div>
+                    <div class="filter-group">
+                        <label>Tipo Planta</label>
+                        <div id="rep-tipo-planta" class="multi-select-custom"></div>
+                    </div>
+                    <div class="filter-group">
+                        <label>Base Fuente</label>
+                        <div id="rep-base-fuente" class="multi-select-custom"></div>
+                    </div>
                     <div class="filter-group" style="grid-column: span 1;">
                         <label>Búsqueda Inteligente</label>
                         <div class="flex gap-2">
@@ -304,8 +316,22 @@ export const reporte = {
         this.renderMultiSelect('rep-mes', monthOpts, "Seleccionar Meses");
 
         const dirs = new Set();
-        this._data.forEach(d => { if (d.direccion) dirs.add(d.direccion); });
+        const plantas = new Set();
+        const tipos = new Set();
+        const bases = new Set();
+
+        this._data.forEach(d => {
+            if (d.direccion) dirs.add(d.direccion);
+            if (d.planta) plantas.add(d.planta);
+            if (d.tipo_planta) tipos.add(d.tipo_planta);
+            if (d.base_fuente) bases.add(d.base_fuente);
+        });
+
         this.renderMultiSelect('rep-direccion', [...dirs].sort(), "Seleccionar Direcciones");
+        this.renderMultiSelect('rep-planta', [...plantas].sort(), "Seleccionar Planta");
+        this.renderMultiSelect('rep-tipo-planta', [...tipos].sort(), "Tipo Planta");
+        this.renderMultiSelect('rep-base-fuente', [...bases].sort(), "Base Fuente");
+
         this.updateLinkedFilters('dir');
     },
 
@@ -315,8 +341,14 @@ export const reporte = {
 
         container.innerHTML = ui.renderSearchableMultiSelect(id + '-inner', null, options, placeholder);
         ui.initSearchableMultiSelect(id + '-inner', () => {
-            if (id === 'rep-direccion') this.updateLinkedFilters('dir');
-            else if (id === 'rep-gerencia') this.updateLinkedFilters('ger');
+            const cascades = {
+                'rep-direccion': 'dir',
+                'rep-gerencia': 'ger',
+                'rep-planta': 'pla',
+                'rep-tipo-planta': 'tip',
+                'rep-base-fuente': 'bas'
+            };
+            if (cascades[id]) this.updateLinkedFilters(cascades[id]);
             else this.applyFilters();
         }, placeholder);
     },
@@ -330,23 +362,62 @@ export const reporte = {
     updateLinkedFilters(source) {
         const selDirs = this.getSelectedValues('rep-direccion');
         const selGers = this.getSelectedValues('rep-gerencia');
+        const selPlantas = this.getSelectedValues('rep-planta');
+        const selTipos = this.getSelectedValues('rep-tipo-planta');
+        const selBases = this.getSelectedValues('rep-base-fuente');
 
-        let filteredForGer = this._data;
-        if (selDirs.length > 0) filteredForGer = filteredForGer.filter(d => selDirs.includes(d.direccion));
+        // Cascade Hierarchy: Dir -> Ger -> Planta -> Tipo -> Base -> Proyecto
 
+        // 1. Update Gerencias based on selection of Dirs
         if (source === 'dir') {
             const gers = new Set();
-            filteredForGer.forEach(d => { if (d.gerencia) gers.add(d.gerencia); });
+            this._data.filter(d => selDirs.length === 0 || selDirs.includes(d.direccion))
+                .forEach(d => { if (d.gerencia) gers.add(d.gerencia); });
             this.renderMultiSelect('rep-gerencia', [...gers].sort(), "Seleccionar Gerencias");
         }
 
-        let filteredForProy = filteredForGer;
-        if (source !== 'dir' && selGers.length > 0) {
-            filteredForProy = filteredForProy.filter(d => selGers.includes(d.gerencia));
+        // 2. Update Plantas based on Dirs + Gers
+        if (['dir', 'ger'].includes(source)) {
+            const plantas = new Set();
+            this._data.filter(d =>
+                (selDirs.length === 0 || selDirs.includes(d.direccion)) &&
+                (selGers.length === 0 || selGers.includes(d.gerencia))
+            ).forEach(d => { if (d.planta) plantas.add(d.planta); });
+            this.renderMultiSelect('rep-planta', [...plantas].sort(), "Seleccionar Planta");
         }
 
+        // 3. Update Tipos based on Dirs + Gers + Plantas
+        if (['dir', 'ger', 'pla'].includes(source)) {
+            const tipos = new Set();
+            this._data.filter(d =>
+                (selDirs.length === 0 || selDirs.includes(d.direccion)) &&
+                (selGers.length === 0 || selGers.includes(d.gerencia)) &&
+                (selPlantas.length === 0 || selPlantas.includes(d.planta))
+            ).forEach(d => { if (d.tipo_planta) tipos.add(d.tipo_planta); });
+            this.renderMultiSelect('rep-tipo-planta', [...tipos].sort(), "Tipo Planta");
+        }
+
+        // 4. Update Bases based on Dirs + Gers + Plantas + Tipos
+        if (['dir', 'ger', 'pla', 'tip'].includes(source)) {
+            const bases = new Set();
+            this._data.filter(d =>
+                (selDirs.length === 0 || selDirs.includes(d.direccion)) &&
+                (selGers.length === 0 || selGers.includes(d.gerencia)) &&
+                (selPlantas.length === 0 || selPlantas.includes(d.planta)) &&
+                (selTipos.length === 0 || selTipos.includes(d.tipo_planta))
+            ).forEach(d => { if (d.base_fuente) bases.add(d.base_fuente); });
+            this.renderMultiSelect('rep-base-fuente', [...bases].sort(), "Base Fuente");
+        }
+
+        // 5. Update Proyectos based on ALL above
         const proys = new Set();
-        filteredForProy.forEach(d => {
+        this._data.filter(d =>
+            (selDirs.length === 0 || selDirs.includes(d.direccion)) &&
+            (selGers.length === 0 || selGers.includes(d.gerencia)) &&
+            (selPlantas.length === 0 || selPlantas.includes(d.planta)) &&
+            (selTipos.length === 0 || selTipos.includes(d.tipo_planta)) &&
+            (selBases.length === 0 || selBases.includes(d.base_fuente))
+        ).forEach(d => {
             if (d.proyectos) d.proyectos.forEach(p => proys.add(p));
             if (d.nombre_proyecto) proys.add(d.nombre_proyecto);
         });
@@ -361,11 +432,17 @@ export const reporte = {
         const selDirs = this.getSelectedValues('rep-direccion');
         const selGers = this.getSelectedValues('rep-gerencia');
         const selProys = this.getSelectedValues('rep-proyecto');
+        const selPlantas = this.getSelectedValues('rep-planta');
+        const selTipos = this.getSelectedValues('rep-tipo-planta');
+        const selBases = this.getSelectedValues('rep-base-fuente');
         const fSearch = document.getElementById('rep-search').value.toLowerCase();
 
         this._filteredData = this._data.filter(d => {
             if (selDirs.length > 0 && !selDirs.includes(d.direccion)) return false;
             if (selGers.length > 0 && !selGers.includes(d.gerencia)) return false;
+            if (selPlantas.length > 0 && !selPlantas.includes(d.planta)) return false;
+            if (selTipos.length > 0 && !selTipos.includes(d.tipo_planta)) return false;
+            if (selBases.length > 0 && !selBases.includes(d.base_fuente)) return false;
             if (selProys.length > 0) {
                 const hasProy = d.proyectos ? d.proyectos.some(p => selProys.includes(p)) : selProys.includes(d.nombre_proyecto);
                 if (!hasProy) return false;

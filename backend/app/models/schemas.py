@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 from pydantic import BaseModel, Field
 
@@ -46,6 +46,8 @@ class PosicionSchema(BaseModel):
     estado: Optional[str] = Field("Vacante", alias="Estado")
     p_jefe: Optional[str] = Field(None, alias="P_Jefe")
     observacion: Optional[str] = Field(None, alias="Observacion")
+    usuario: Optional[str] = Field(None, alias="Usuario")
+    modificacion: Optional[datetime] = Field(None, alias="Modificacion")
 
     class Config:
         populate_by_name = True

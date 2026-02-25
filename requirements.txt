@@ -9,3 +9,6 @@ uvicorn
 google-auth
 pydantic
 requests
+PyYAML
+pydantic-settings
+python-multipart

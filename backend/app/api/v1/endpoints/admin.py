@@ -259,6 +259,39 @@ def get_dashboard_global(anio: Optional[int] = None, user: Dict[str, Any] = Depe
         
         lista_matriz = sorted(proj_calc["matrix_proyectos"], key=lambda x: x["total"], reverse=True)
         
+        # 8. New Matrix: Trabajadores Sin Financiación (A01/A02) vs Planta
+        sin_finan_matrix = {} # planta -> [12 months heads: set()]
+        sin_finan_cost_matrix = {} # planta -> [12 months cost: float]
+        prefix_val = f"{curr_year}-"
+        for m_group in mensualizado:
+            if not m_group["anioMes"].startswith(prefix_val): continue
+            m_idx = int(m_group["anioMes"].split("-")[1]) - 1
+            for d in m_group["detalle"]:
+                pid = d["id_proyecto"]
+                if pid in ("A01", "A02"):
+                    planta = d.get("Planta") or "Sin Definir"
+                    if planta not in sin_finan_matrix:
+                        sin_finan_matrix[planta] = [set() for _ in range(12)]
+                        sin_finan_cost_matrix[planta] = [0.0 for _ in range(12)]
+                    sin_finan_matrix[planta][m_idx].add(d["cedula"])
+                    sin_finan_cost_matrix[planta][m_idx] += d["valor"]
+        
+        matrix_sin_finan = []
+        for planta, months_sets in sin_finan_matrix.items():
+            matrix_sin_finan.append({
+                "label": planta,
+                "months": [len(s) for s in months_sets],
+                "total": len(set().union(*months_sets))
+            })
+
+        matrix_costo_sin_finan = []
+        for planta, costs in sin_finan_cost_matrix.items():
+            matrix_costo_sin_finan.append({
+                "label": planta,
+                "months": costs,
+                "total": sum(costs)
+            })
+
         return {
             "ok": True,
             "available_years": available_years,
@@ -275,7 +308,9 @@ def get_dashboard_global(anio: Optional[int] = None, user: Dict[str, Any] = Depe
             "dist_direccion": sorted(dist_direccion_final, key=lambda x: x["total"], reverse=True),
             "dist_direccion_costo": sorted([{"label": k, "value": v} for k, v in proj_calc["dist_dir_costo"].items()], key=lambda x: x["value"], reverse=True),
             "dist_proyectos": [{"label": m["label"], "value": m["total"]} for m in lista_matriz if not m["label"].startswith("⚠")][:10],
-            "matrix_proyectos": lista_matriz
+            "matrix_proyectos": lista_matriz,
+            "matrix_sin_finan": sorted(matrix_sin_finan, key=lambda x: x["total"], reverse=True),
+            "matrix_costo_sin_finan": sorted(matrix_costo_sin_finan, key=lambda x: x["total"], reverse=True)
         }
     except Exception as e:
         # Fallback for Local Debug without DB
@@ -300,6 +335,13 @@ def get_dashboard_global(anio: Optional[int] = None, user: Dict[str, Any] = Depe
                         "label": "PROY-001 - Proyecto Mock",
                         "months": [1000000.0] * 12,
                         "total": 12000000.0
+                    }
+                ],
+                "matrix_sin_finan": [
+                    {
+                        "label": "Planta",
+                        "months": [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
+                        "total": 5
                     }
                 ]
             }
@@ -326,7 +368,7 @@ def get_reporte_detallado(direccion: Optional[str] = None, gerencia: Optional[st
             params["year_start"] = start_d; params["year_end"] = end_d
         else:
             params["year_start"] = date(year_val, 1, 1); params["year_end"] = date(year_val, 12, 31)
-        query_sql = text(f"SELECT f.id_financiacion, f.cedula, f.salario_base, f.fecha_inicio, f.fecha_fin, f.id_proyecto, f.rubro, f.id_fuente, f.id_componente, f.id_subcomponente, f.id_categoria, f.id_responsable, c.atep, c.gerencia, c.fecha_terminacion, c.estado, c.fecha_terminacion_real, p.cargo, p.banda, p.familia, p.IDPosicion AS posicion_c, p.Direccion, CONCAT_WS(' ', d.p_nombre, d.s_nombre, d.p_apellido, d.s_apellido) AS nombre_completo, c.id_contrato FROM BFinanciacion f JOIN BContrato c ON f.id_contrato = c.id_contrato JOIN BData d ON c.cedula = d.cedula LEFT JOIN BPosicion p ON c.posicion = p.IDPosicion WHERE f.fecha_fin >= :year_start AND f.fecha_inicio <= :year_end {where_clause}")
+        query_sql = text(f"SELECT f.id_financiacion, f.cedula, f.salario_base, f.fecha_inicio, f.fecha_fin, f.id_proyecto, f.rubro, f.id_fuente, f.id_componente, f.id_subcomponente, f.id_categoria, f.id_responsable, c.atep, c.gerencia, c.fecha_terminacion, c.estado, c.fecha_terminacion_real, p.cargo, p.banda, p.familia, p.IDPosicion AS posicion_c, p.Direccion, p.Planta, p.Tipo_planta, p.Base_Fuente, CONCAT_WS(' ', d.p_nombre, d.s_nombre, d.p_apellido, d.s_apellido) AS nombre_completo, c.id_contrato FROM BFinanciacion f JOIN BContrato c ON f.id_contrato = c.id_contrato JOIN BData d ON c.cedula = d.cedula LEFT JOIN BPosicion p ON c.posicion = p.IDPosicion WHERE f.fecha_fin >= :year_start AND f.fecha_inicio <= :year_end {where_clause}")
         with engine.connect() as conn:
             rows = conn.execute(query_sql, params).mappings().all(); incs_rows = conn.execute(text("SELECT * FROM BIncremento")).mappings().all()
             incrementos = {int(r["anio"]): dict(r) for r in incs_rows}
@@ -352,7 +394,7 @@ def get_reporte_detallado(direccion: Optional[str] = None, gerencia: Optional[st
                 info = fin_info_map.get(det["id"])
                 if not info: continue
                 key = f"{info['cedula']}-{info['id_proyecto']}"
-                if key not in emp_matrix: emp_matrix[key] = {"cedula": info["cedula"], "nombre": info["nombre_completo"], "direccion": info["Direccion"], "gerencia": info["gerencia"], "id_proyecto": info["id_proyecto"], "nombre_proyecto": info["id_proyecto"], "fecha_fin": info["fecha_terminacion"], "months": [0.0]*12, "total": 0.0}
+                if key not in emp_matrix: emp_matrix[key] = {"cedula": info["cedula"], "nombre": info["nombre_completo"], "direccion": info["Direccion"], "gerencia": info["gerencia"], "planta": info.get("Planta"), "tipo_planta": info.get("Tipo_planta"), "base_fuente": info.get("Base_Fuente"), "id_proyecto": info["id_proyecto"], "nombre_proyecto": info["id_proyecto"], "fecha_fin": info["fecha_terminacion"], "months": [0.0]*12, "total": 0.0}
                 if 0 <= m_idx < 12: emp_matrix[key]["months"][m_idx] += det["valor"]; emp_matrix[key]["total"] += det["valor"]
         with engine.connect() as conn:
             proy_names = {r["codigo"]: r["nombre"] for r in conn.execute(text("SELECT codigo, nombre FROM dim_proyectos UNION SELECT codigo, nombre FROM dim_proyectos_otros")).mappings().all()}
@@ -683,8 +725,9 @@ def get_vacantes(user: Dict[str, Any] = Depends(get_current_user)):
     try:
         query = text("""
             SELECT IDPosicion as id, Salario as salario, Cargo as cargo, Rol as rol, Banda as banda, 
-                   Direccion as direccion, Gerencia as gerencia, Area as area, 
+                   Familia as familia, Direccion as direccion, Gerencia as gerencia, Area as area, 
                    Planta as planta, Tipo_planta as tipo_planta, Base_Fuente as base_fuente, Estado as estado,
+                   P_Jefe as p_jefe,
                    (SELECT COUNT(*) FROM BContrato WHERE posicion = BPosicion.IDPosicion) as contract_count
             FROM BPosicion
             WHERE UPPER(Estado) = 'VACANTE'
@@ -707,8 +750,9 @@ def get_vacancy_detail(id_posicion: str, user: Dict[str, Any] = Depends(get_curr
     try:
         query = text("""
             SELECT IDPosicion as id, Salario as salario, Cargo as cargo, Rol as rol, Banda as banda, 
-                   Direccion as direccion, Gerencia as gerencia, Area as area, 
-                   Planta as planta, Tipo_planta as tipo_planta, Base_Fuente as base_fuente, Estado as estado
+                   Familia as familia, Direccion as direccion, Gerencia as gerencia, Area as area, 
+                   Planta as planta, Tipo_planta as tipo_planta, Base_Fuente as base_fuente, Estado as estado,
+                   P_Jefe as p_jefe, Observacion as observacion, Usuario as usuario, Modificacion as modificacion
             FROM BPosicion
             WHERE IDPosicion = :id_posicion
             LIMIT 1
@@ -810,10 +854,8 @@ def create_posicion(pos: PosicionSchema, user: Dict[str, Any] = Depends(get_curr
         """)
         
         with engine.begin() as conn:
-            data = pos.model_dump(by_alias=True)
+            data = pos.model_dump() # Use field names (id, salario...) to match placeholders
             data["usuario"] = user.get("email")
-            # Modification date is handled by NOW() in SQL, but for audit log we might want it in data dict
-            # or just rely on the DB. For simplicity we assume DB handles it.
             conn.execute(query, data)
             
         # Audit Log
@@ -856,7 +898,7 @@ def update_posicion(id_posicion: str, pos: PosicionSchema, user: Dict[str, Any] 
                 Usuario=:usuario, Modificacion=NOW()
             WHERE IDPosicion = :id_param
         """)
-        data = pos.model_dump(by_alias=True)
+        data = pos.model_dump() # Use field names (id, salario...) to match placeholders
         data["id_param"] = id_posicion
         data["usuario"] = user.get("email")
         
@@ -979,7 +1021,8 @@ def get_reporte_cars(anio: Optional[int] = None, user: Dict[str, Any] = Depends(
         q_sql = text("""
             SELECT f.*, 
                 c.atep, c.gerencia, c.id_contrato, c.estado, c.fecha_terminacion_real,
-                p.cargo, p.banda, p.familia, p.IDPosicion AS posicion_c, p.Direccion, p.Planta,
+                p.cargo, p.banda, p.familia, p.IDPosicion AS posicion_c, p.Direccion, 
+                p.Planta, p.Tipo_planta, p.Base_Fuente,
                 CONCAT_WS(' ', d.p_nombre, d.s_nombre, d.p_apellido, d.s_apellido) AS nombre_completo
             FROM BFinanciacion f
             JOIN BContrato c ON f.id_contrato = c.id_contrato
@@ -1078,6 +1121,9 @@ def get_reporte_cars(anio: Optional[int] = None, user: Dict[str, Any] = Depends(
                         "direccion": item.get("Direccion"),
                         "gerencia": item.get("gerencia"),
                         "estado": item.get("Estado"),
+                        "planta": item.get("Planta"),
+                        "tipo_planta": item.get("Tipo_planta"),
+                        "base_fuente": item.get("Base_Fuente"),
                         
                         "rubro": item.get("rubro"),
                         "id_proyecto": item.get("id_proyecto"),
@@ -1113,6 +1159,9 @@ def get_reporte_cars(anio: Optional[int] = None, user: Dict[str, Any] = Depends(
                 "Dirección": v["direccion"],
                 "Gerencia": v["gerencia"],
                 "Estado": v["estado"],
+                "Planta": v["planta"],
+                "Tipo Planta": v["tipo_planta"],
+                "Base Fuente": v["base_fuente"],
                 "Rubro": v["rubro"],
                 
                 # Enriched Fields

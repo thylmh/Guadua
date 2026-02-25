@@ -101,9 +101,7 @@ export const vacantes = {
                                             <button class="btn btn-ghost btn-sm edit-vacante-btn" data-id="${v.id}" title="Editar">✏️</button>
                                             <button class="btn btn-ghost btn-sm delete-vacante-btn" data-id="${v.id}" style="color: #EF4444;" title="Eliminar">🗑️</button>
                                         ` : ''}
-                                        ${auth.isAdmin() ? `
-                                            <button class="btn btn-primary btn-sm project-vacante-btn" data-id="${v.id}" data-cargo="${v.cargo}" data-salario="${v.salario || 0}" style="background: var(--accent); border-color: var(--accent); white-space: nowrap; font-weight: 700; height: 32px;">📊 Proyectar</button>
-                                        ` : ''}
+                                        <button class="btn btn-primary btn-sm project-vacante-btn" data-id="${v.id}" data-cargo="${v.cargo}" data-salario="${v.salario || 0}" style="background: var(--accent); border-color: var(--accent); white-space: nowrap; font-weight: 700; height: 32px;">📊 Proyectar</button>
                                     </div>
                                 </td>
                             </tr>
@@ -487,7 +485,7 @@ export const vacantes = {
             Tipo_planta: document.getElementById('pos-tipo-planta').value.trim(),
             Base_Fuente: document.getElementById('pos-fuente').value.trim(),
             Estado: 'Vacante',
-            P_Jefe: document.getElementById('pos-p_jefe').value,
+            P_Jefe: document.getElementById('pos-p-jefe').value,
             Observacion: document.getElementById('pos-obs').value.trim()
         };
 

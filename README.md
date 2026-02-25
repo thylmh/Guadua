@@ -1,134 +1,39 @@
-# 🌳 GUADUA — Inteligencia de Nómina
+# 🌳 GUADUA - Inteligencia de Nómina
 
-**Guadua** es una plataforma integral de gestión de nómina y talento humano diseñada para el Instituto Alexander von Humboldt. Su objetivo es centralizar la proyección presupuestal, la conciliación de liquidaciones y la gestión estratégica de vacantes en una interfaz moderna y eficiente.
+Plataforma estratégica para la gestión, planeación y auditoría de la nómina institucional del Instituto Alexander von Humboldt.
 
----
+## ✨ Características Principales (v2.5)
 
-## 🚀 Características Principales
-
-### 1. 📊 Dashboard Estratégico
-- Visión global de costos de nómina proyectados vs. ejecutados.
-- Alertas tempranas de desviaciones presupuestales.
-- Distribución de costos por fuentes de financiación y centros de costos.
-
-### 2. 👥 Gestión de Talento
-- **Consulta Individual**: Historial detallado de cada colaborador con proyección de costos.
-- **Gestión de Vacantes**: Control de posiciones abiertas, perfiles y simulación de impacto financiero por contratación.
-
-### 3. 💵 Motor de Presupuesto
-- **Líneas Base**: Congelación de versiones presupuestales para auditoría y comparativas (Snapshots).
-- **Proyección Automática**: Cálculo de costos futuros basado en incrementos legales (IPC, SMLV) y reglas institucionales.
-- **Comparador**: Herramienta de diferencias para identificar cambios entre versiones del presupuesto.
-
-### 4. ⚙️ Administración y Seguridad
-- **Roles y Permisos**: Sistema granular (Admin, Talento, Financiero, Nómina, Usuario).
-- **Auditoría**: Registro inmutable de cambios críticos en el sistema.
-- **Solicitudes**: Flujo de aprobación para cambios sensibles en la nómina.
-
----
+- **AI Database Agent:** Chatbot inteligente integrado con Vertex AI (Gemini 2.0 Flash) capaz de consultar la base de datos de nómina en lenguaje natural con respuestas instantáneas y formateadas.
+- **Modern UX/UI:** Interfaz premium diseñada para la eficiencia, con navegación dinámica basada en roles, micro-animaciones y diseño responsivo.
+- **Dashboard Estratégico:** Visión global de costos de nómina, inversión por direcciones y análisis de proyectos financiadores con filtros de Planta, Tipo y Base.
+- **Consulta Individual:** Historial detallado de cada colaborador, tramos de financiación y proyecciones de liquidación.
+- **Gestión de Vacantes:** Control de posiciones institucionales disponibles y proyección de impacto de contratación.
+- **Auditoría e Integridad:** Bitácora inmutable de seguridad y flujo de aprobación de cambios presupuestales.
 
 ## 🛠️ Stack Tecnológico
 
-La arquitectura de Guadua está desacoplada para garantizar escalabilidad y mantenibilidad:
+- **Backend:** FastAPI (Python 3.10+), SQLAlchemy, LangChain (SQL Utilities).
+- **IA:** Google Vertex AI (Gemini 2.0 Flash).
+- **Frontend:** Vanilla Javascript (Arquitectura Modular), CSS3 Moderno, Tabulator, SheetJS.
+- **Infraestructura:** Google Cloud Platform (Cloud Run, Cloud SQL, Vertex AI).
 
-- **Frontend**: Vanilla JS (ES6+) con arquitectura modular.
-  - Diseño: CSS nativo con variables (Tokens de diseño institucional).
-  - Gráficos: Chart.js / ECharts.
-- **Backend**: Python (FastAPI).
-  - ORM: SQLAlchemy.
-  - Base de Datos: Google Cloud SQL (MySQL).
-  - Autenticación: Google OAuth 2.0.
-- **Infraestructura**: Google Cloud Platform (GCP).
-  - **Cloud Run**: Para el API y Jobs de sincronización.
-  - **Cloud Storage**: Hosting del Frontend estático.
-  - **Docker**: Contenerización del servicio backend.
+## 🚀 Despliegue (macOS)
 
----
+Para desplegar la aplicación a producción, asegúrate de tener configurado `gcloud` y ejecuta:
 
-## 💻 Instalación Local
-
-### Prerrequisitos
-- Python 3.9+
-- Google Cloud SDK (`gcloud`) auteticado.
-- Acceso a la base de datos de desarrollo (Cloud SQL Proxy).
-
-### Pasos
-1. **Clonar el repositorio**:
-   ```bash
-   git clone https://github.com/thylmh/Guadua.git
-   cd Guadua
-   ```
-
-2. **Backend**:
-   ```bash
-   cd backend
-   python -m venv .venv
-   .\.venv\Scripts\activate
-   pip install -r ../requirements.txt
-   ```
-
-3. **Variables de Entorno**:
-   Asegúrate de tener el archivo `env.yaml` o las variables configuradas en tu entorno local para la conexión a BD.
-
-4. **Ejecutar Localmente**:
-   Puedes usar el script de utilidad (PowerShell):
-   ```powershell
-   ./run_local.ps1
-   ```
-   Esto levantará el backend en `localhost:8080` y servirá el frontend.
-
----
-
-## 🚀 Despliegue a Producción
-
-El despliegue está automatizado mediante scripts de PowerShell que interactúan con GCP.
-
-**Comando de Despliegue Unificado:**
-```powershell
-./deploy_prod.ps1
+```bash
+./deploy_prod.sh
 ```
 
-**¿Qué hace este script?**
-1. **Backend**: Construye la imagen Docker, la sube a Artifact Registry y actualiza el servicio Cloud Run `bosque-api`.
-2. **Jobs**: Actualiza el Job de sincronización `bosque` en Cloud Run Jobs.
-3. **Frontend**: Sube los archivos estáticos (`html`, `css`, `js`) al bucket público de Cloud Storage, configurando los headers de caché y tipos MIME correctos.
+## 💻 Desarrollo Local
 
----
+1. Asegúrate de tener el proxy de Cloud SQL activo.
+2. Ejecuta el script de inicio local:
 
-## 📂 Estructura del Proyecto
-
-```text
-/guadua_seed
-├── backend/            # API REST (FastAPI)
-│   ├── app/
-│   │   ├── api/        # Endpoints (v1)
-│   │   ├── core/       # Config, Seguridad, DB
-│   │   ├── models/     # Modelos SQLAlchemy
-│   │   └── services/   # Lógica de Negocio Compleja
-│   └── Dockerfile      # Definición de contenedor
-│
-├── frontend/           # Cliente Web
-│   ├── css/            # Estilos (styles.css)
-│   ├── js/
-│   │   ├── modules/    # Módulos de lógica (admin, nomina, dashboard)
-│   │   ├── main.js     # Router y orquestador
-│   │   └── auth.js     # Gestión de sesión e identidad
-│   └── Index.html      # Punto de entrada único (SPA)
-│
-├── deploy_prod.ps1     # Script de despliegue maestro
-└── estructura.sql      # Schema de base de datos de referencia
+```bash
+./run_local.sh
 ```
 
 ---
-
-## 🎨 Guía de Estilo
-
-El diseño sigue el **[BOSQUE_DESIGN_SPEC.md] (No incluido en seed, referencia interna)**:
-- **Colores**: Uso estricto de la paleta institucional (Verdes y Azules Humboldt).
-- **Componentes**: Tarjetas de acción (`action-card`) y grids premium (`luxury-grid`).
-- **UX**: Prioridad a la claridad de datos sobre la decoración.
-
----
-
-© 2026 Instituto de Investigación de Recursos Biológicos Alexander von Humboldt.
-*Desarrollado para la DIFA.*
+*Optimizado y consolidado por Antigravity - 25 de Febrero de 2026*
