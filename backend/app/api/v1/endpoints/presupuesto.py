@@ -560,15 +560,3 @@ def rechazar_solicitud(req_id: int, user: dict = Depends(get_current_user), db: 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.delete("/solicitudes/limpiar/todo")
-def limpiar_solicitudes(user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
-    """ (Solo Admin) Limpia todas las solicitudes de la tabla """
-    if user.get('role') != 'admin':
-        raise HTTPException(status_code=403, detail="No autorizado")
-    
-    try:
-        with db.bind.begin() as conn:
-            conn.execute(text("TRUNCATE TABLE BSolicitud_Cambio"))
-        return {"ok": True, "message": "Historial de solicitudes limpiado"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
