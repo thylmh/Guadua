@@ -14,3 +14,7 @@ openpyxl
 pyodbc
 cryptography
 python-multipart
+google-cloud-aiplatform
+langchain
+langchain-community
+langchain-google-vertexai
