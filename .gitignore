@@ -1,12 +1,41 @@
-
+# ==========================
 # Python
+# ==========================
+.venv/
 __pycache__/
 *.py[cod]
-*$py.class
-.venv/
-env.yaml
-.env
+*.pyo
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Cloud
-.gcloudignore
+# ==========================
+# macOS
+# ==========================
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ==========================
+# Logs temporales
+# ==========================
+*.log
+*.tmp
+*.bak
+
+# ==========================
+# Binario local (no se versiona)
+# ==========================
+cloud-sql-proxy
+
+# ==========================
+# Scripts generados en Windows (reemplazados por .sh)
+# ==========================
+start_proxy.bat
+start_backend.bat
+start_frontend.bat

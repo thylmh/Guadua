@@ -188,6 +188,122 @@ export const dashboard = {
                         </div>
                     </div>
 
+                    <div class="matrix-card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                            <h3 style="font-size: 16px; font-weight: 800; color: #0F172A; text-transform: uppercase; letter-spacing: 0.05em; margin: 0;">
+                                Trabajadores Sin Financiación
+                                <span style="color: #94A3B8; font-weight: 400; font-size: 14px; text-transform: none;">— Headcount Mensual A01/A02 (${this.selectedYear})</span>
+                            </h3>
+                        </div>
+
+                        <div style="overflow-x: auto; margin: 0 -32px; padding: 0 32px;">
+                            <table class="matrix-table">
+                                <thead>
+                                    <tr>
+                                        <th style="text-align: left; position: sticky; left: 0; background: #F8FAFC; z-index: 5;">Planta</th>
+                                        ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'].map(m => `<th style="text-align: right;">${m}</th>`).join('')}
+                                        <th style="text-align: right; color: #0F172A;">Total Único</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.matrix_sin_finan && data.matrix_sin_finan.length > 0 ? data.matrix_sin_finan.map(row => `
+                                        <tr>
+                                            <td style="font-weight: 600; color: #334155; position: sticky; left: 0; background: white; z-index: 4;">
+                                                • ${row.label}
+                                            </td>
+                                            ${row.months.map(val => `<td class="text-right" style="font-weight: 700; color: ${val > 0 ? '#EF4444' : '#E2E8F0'}; font-size: 12px;">
+                                                ${val > 0 ? val : '—'}
+                                            </td>`).join('')}
+                                            <td class="text-right" style="font-weight: 800; color: #0F172A; background: #F8FAFC; font-size: 13px;">
+                                                ${row.total}
+                                            </td>
+                                        </tr>
+                                    `).join('') : `<tr><td colspan="14" style="text-align: center; padding: 32px; color: #94A3B8;">No hay trabajadores en A01/A02 para este periodo.</td></tr>`}
+                                </tbody>
+                                <tfoot>
+                                    ${(() => {
+                    const colTotals = Array(12).fill(0);
+                    let grandTotal = 0;
+                    if (data.matrix_sin_finan) {
+                        data.matrix_sin_finan.forEach(row => {
+                            row.months.forEach((v, i) => colTotals[i] += v);
+                        });
+                        // The backend doesn't send the grand unique total directly, 
+                        // but for global "Total" typically a sum of rows or re-calculating fits.
+                        // Here we'll sum the monthly totals.
+                    }
+                    return `
+                                            <tr style="background: #F8FAFC; border-top: 2px solid #E2E8F0;">
+                                                <td style="padding: 12px; font-weight: 800; color: #0F172A;">TOTAL</td>
+                                                ${colTotals.map(t => `<td class="text-right" style="padding: 12px; font-weight: 800; color: #0F172A; font-size: 12px;">${t || '—'}</td>`).join('')}
+                                                <td class="text-right" style="padding: 12px; font-weight: 900; color: #EF4444; background: #FEF2F2; font-size: 13px;">
+                                                    ${data.matrix_sin_finan ? data.matrix_sin_finan.reduce((acc, r) => acc + r.total, 0) : 0}
+                                                </td>
+                                            </tr>
+                                        `;
+                })()}
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="matrix-card">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                            <h3 style="font-size: 16px; font-weight: 800; color: #0F172A; text-transform: uppercase; letter-spacing: 0.05em; margin: 0;">
+                                Costo de Trabajadores Sin Financiación
+                                <span style="color: #94A3B8; font-weight: 400; font-size: 14px; text-transform: none;">— Proyección A01/A02 (${this.selectedYear})</span>
+                            </h3>
+                        </div>
+
+                        <div style="overflow-x: auto; margin: 0 -32px; padding: 0 32px;">
+                            <table class="matrix-table">
+                                <thead>
+                                    <tr>
+                                        <th style="text-align: left; position: sticky; left: 0; background: #F8FAFC; z-index: 5;">Planta</th>
+                                        ${['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'].map(m => `<th style="text-align: right;">${m}</th>`).join('')}
+                                        <th style="text-align: right; color: #0F172A;">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${data.matrix_costo_sin_finan && data.matrix_costo_sin_finan.length > 0 ? data.matrix_costo_sin_finan.map(row => `
+                                        <tr>
+                                            <td style="font-weight: 600; color: #334155; position: sticky; left: 0; background: white; z-index: 4;">
+                                                💰 ${row.label}
+                                            </td>
+                                            ${row.months.map(val => `<td class="text-right matrix-money" style="color: ${val > 0 ? '#475569' : '#E2E8F0'}; font-size: 11px;">
+                                                ${val > 0 ? ui.moneyCompact(val).replace(' M', 'M') : '—'}
+                                            </td>`).join('')}
+                                            <td class="text-right matrix-money" style="font-weight: 800; color: #0F172A; background: #F8FAFC; font-size: 12px;">
+                                                ${ui.moneyCompact(row.total).replace(' M', 'M')}
+                                            </td>
+                                        </tr>
+                                    `).join('') : `<tr><td colspan="14" style="text-align: center; padding: 32px; color: #94A3B8;">No hay costos asociados a A01/A02 para este periodo.</td></tr>`}
+                                </tbody>
+                                <tfoot>
+                                    ${(() => {
+                    const colTotals = Array(12).fill(0);
+                    let grandTotal = 0;
+                    if (data.matrix_costo_sin_finan) {
+                        data.matrix_costo_sin_finan.forEach(row => {
+                            row.months.forEach((v, i) => colTotals[i] += v);
+                            grandTotal += row.total;
+                        });
+                    }
+                    return `
+                                            <tr style="background: #F8FAFC; border-top: 2px solid #E2E8F0;">
+                                                <td style="padding: 12px; font-weight: 800; color: #0F172A;">TOTAL</td>
+                                                ${colTotals.map(t => `<td class="text-right matrix-money" style="padding: 12px; font-weight: 800; color: #0F172A; font-size: 11px;">${t > 0 ? ui.moneyCompact(t).replace(' M', 'M') : '—'}</td>`).join('')}
+                                                <td class="text-right matrix-money" style="padding: 12px; font-weight: 900; color: #1E40AF; background: #EFF6FF; font-size: 12px;">
+                                                    ${ui.moneyCompact(grandTotal).replace(' M', 'M')}
+                                                </td>
+                                            </tr>
+                                        `;
+                })()}
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+
                     <!-- Alerts Section Moved to Bottom -->
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 24px; margin-bottom: 32px;">
                         <!-- Inconsistencias -->
