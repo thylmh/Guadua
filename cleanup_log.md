@@ -9,10 +9,14 @@
 - Creada rama `cleanup/Guadua`.
 
 ### Fase 2: Limpieza de artefactos
-- [Pendiente] Eliminación de `__pycache__` y archivos temporales.
+- [Completado] Eliminación de `__pycache__` y archivos temporales.
+- [Completado] Archivos de prueba movidos a `archived_temp/`.
 
 ### Fase 3: Optimización
-- [Pendiente] Consolidación de cambios.
+- [Completado] Consolidación de IA, UX y fixes en rama `cleanup/Guadua`.
+- [Completado] Fusión (merge) exitosa a la rama `main`.
+- [Completado] Actualización de `README.md` con nuevas funcionalidades.
 
-### Fase 5/7: Despliegue
-- [Pendiente] Ejecución de `./deploy_prod.sh`.
+### Fase 4: Preparación para Despliegue
+- [Completado] Sincronización de rama `main`.
+- [Nota] El push final a GitHub y el despliegue a producción deben ser validados por el usuario debido a restricciones de permisos en la terminal de macOS.
