@@ -5,6 +5,7 @@
 import { usuarios } from './usuarios.js';
 import { incrementos } from './incrementos.js';
 import { controlPresupuestal } from './control_presupuestal.js';
+import { maestra } from './maestra.js';
 
 export const admin = {
     currentTab: 'home',
@@ -54,6 +55,7 @@ export const admin = {
             if (this.currentTab === 'whitelist') await usuarios.load();
             else if (this.currentTab === 'incrementos') await incrementos.load();
             else if (this.currentTab === 'presupuesto') await controlPresupuestal.load();
+            else if (this.currentTab === 'maestra') await maestra.load();
         }
     },
 
@@ -79,6 +81,13 @@ export const admin = {
                     <h3>Líneas Base</h3>
                     <p>Gestión de versiones congeladas del presupuesto para auditoría y comparativas históricas.</p>
                     <div class="card-cta">Ver Historial <span>→</span></div>
+                </div>
+
+                <div class="action-card" onclick="window.admin.switchTab('maestra')" style="border: 1px solid #FECACA;">
+                    <div class="card-icon">🛠️</div>
+                    <h3 style="color: #991B1B;">Tabla Maestra</h3>
+                    <p>Edición directa de la base de datos de financiación. Solo para casos excepcionales.</p>
+                    <div class="card-cta" style="color: #991B1B;">Editar Directo <span>→</span></div>
                 </div>
             </div>
         `;
