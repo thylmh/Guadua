@@ -14,6 +14,7 @@ import { gestionSolicitudes } from './modules/gestion_solicitudes.js';
 import { ui } from './ui.js';
 import { api } from './modules/api.js';
 import { nomina } from './modules/nomina.js';
+import { renderChatbotWidget } from './modules/chatbot.js';
 
 // VERSION CONTROL
 const APP_VERSION = '2.4.5-BUDGET-DYNAMIC-YEARS';
@@ -274,6 +275,7 @@ const init = () => {
         });
     }
 
+    renderChatbotWidget();
     router();
 };
 

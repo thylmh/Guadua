@@ -77,15 +77,16 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 24px;
+    padding: 10px 24px;
     background: var(--white);
-    border-radius: 12px;
+    border-radius: 16px;
     border: 1px solid var(--border);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
-    margin-bottom: 32px;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.03);
+    margin-bottom: 24px;
     position: sticky;
     top: 16px;
     z-index: 100;
+    transition: all 0.3s ease;
 }
 
 .brand-text {
@@ -96,6 +97,17 @@ body {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
+}
+
+.user-profile-nav {
+    background: #F8FAFC;
+    padding: 6px 8px 6px 16px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
 }
 
 /* --- LUXURY CARDS (2026 Spec: 16px radius, breathable padding) --- */
@@ -347,22 +359,54 @@ label {
 /* --- TAB NAV --- */
 .nav-links {
     display: flex;
-    gap: 8px;
+    gap: 4px;
+    background: #F1F5F9;
+    padding: 4px;
+    border-radius: 12px;
+    margin-left: 12px;
 }
 
 .tab-btn {
-    padding: 8px 16px;
-    border-radius: 6px;
+    padding: 8px 14px;
+    border-radius: 8px;
     color: var(--text-muted);
-    font-weight: 600;
+    font-weight: 700;
     text-decoration: none;
     font-size: 13px;
-    transition: color 0.2s;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.tab-btn .nav-icon {
+    font-size: 16px;
+}
+
+.tab-btn:hover {
+    color: var(--primary);
+    background: rgba(255, 255, 255, 0.5);
 }
 
 .tab-btn.active {
-    background: var(--primary-lighter);
-    color: var(--primary-dark);
+    background: var(--white);
+    color: var(--primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+@media (max-width: 1200px) {
+    .tab-btn span:not(.nav-icon) {
+        display: none;
+    }
+
+    .tab-btn {
+        padding: 8px 12px;
+    }
+
+    .brand-text span {
+        display: none;
+    }
 }
 
 /* --- TABLES --- */
