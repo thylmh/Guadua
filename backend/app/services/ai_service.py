@@ -2,7 +2,7 @@ import os
 import threading
 from langchain_google_vertexai import ChatVertexAI
 from langchain_community.utilities import SQLDatabase
-from app.core.config import settings
+from app.core.database import engine
 
 # Global singletons
 _db = None
@@ -29,8 +29,9 @@ def get_db_instance():
     if _db is None:
         with _lock:
             if _db is None:
-                db_uri = f"mysql+pymysql://{settings.DB_USER}:{settings.DB_PASS}@{os.getenv('DB_HOST', '127.0.0.1')}:{os.getenv('DB_PORT', '3306')}/{settings.DB_NAME}"
-                _db = SQLDatabase.from_uri(db_uri, include_tables=["BContrato", "BData", "BFinanciacion", "BNomina"])
+                # Use the existing engine from app/core/database.py
+                # This ensures we use the Cloud SQL Connector in production
+                _db = SQLDatabase(engine, include_tables=["BContrato", "BData", "BFinanciacion", "BNomina"])
     return _db
 
 def get_llm():
