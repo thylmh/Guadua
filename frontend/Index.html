@@ -9,10 +9,12 @@
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🌳</text></svg>">
 
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/maestra.css">
+    <link rel="stylesheet" href="css/chatbot.css">
 
     <script src="https://cdn.sheetjs.com/xlsx-0.20.0/package/dist/xlsx.full.min.js"></script>
     <script src="https://accounts.google.com/gsi/client" async defer></script>
-    
+
     <!-- Tabulator for Master Tables -->
     <link href="https://unpkg.com/tabulator-tables@6.2.1/dist/css/tabulator_modern.min.css" rel="stylesheet">
     <script type="text/javascript" src="https://unpkg.com/tabulator-tables@6.2.1/dist/js/tabulator.min.js"></script>
@@ -158,19 +160,26 @@
                             style="color: #0F172A; font-weight: 800; border-left: 2px solid #E2E8F0; padding-left: 10px; margin-left: 2px;">GUADUA</span>
                     </span>
                     <nav class="nav-links">
-                        <a href="#/home" class="tab-btn">Index</a>
-                        <a href="#/consulta" class="tab-btn">Consulta</a>
-                        <a href="#/dashboard" class="tab-btn">Dashboard</a>
-                        <a href="#/financiero" class="tab-btn financiero-access talento-access hidden">Financiero</a>
-                        <a href="#/vacantes" class="tab-btn talento-access hidden">Vacantes</a>
-                        <a href="#/solicitudes" class="tab-btn">Solicitudes</a>
-                        <a href="#/nomina" class="tab-btn financiero-access admin-only nomina-access hidden">Nómina</a>
+                        <a href="#/home" class="tab-btn"><span class="nav-icon">🏠</span> <span>Index</span></a>
+                        <a href="#/consulta" class="tab-btn"><span class="nav-icon">🔍</span> <span>Consulta</span></a>
+                        <a href="#/dashboard" class="tab-btn"><span class="nav-icon">📊</span>
+                            <span>Dashboard</span></a>
+                        <a href="#/financiero" class="tab-btn financiero-access talento-access hidden"><span
+                                class="nav-icon">📈</span> <span>Financiero</span></a>
+                        <a href="#/vacantes" class="tab-btn talento-access hidden"><span class="nav-icon">🏢</span>
+                            <span>Vacantes</span></a>
+                        <a href="#/solicitudes" class="tab-btn"><span class="nav-icon">📝</span>
+                            <span>Solicitudes</span></a>
+                        <a href="#/nomina" class="tab-btn financiero-access admin-only nomina-access hidden"><span
+                                class="nav-icon">📦</span> <span>Nómina</span></a>
 
-                        <a href="#/admin" class="tab-btn admin-only hidden">Administración</a>
-                        <a href="#/auditoria" class="tab-btn admin-only hidden">Bitácora</a>
+                        <a href="#/admin" class="tab-btn admin-only hidden"><span class="nav-icon">⚙️</span>
+                            <span>Administración</span></a>
+                        <a href="#/auditoria" class="tab-btn admin-only hidden"><span class="nav-icon">🛡️</span>
+                            <span>Bitácora</span></a>
                     </nav>
                 </div>
-                <div class="flex align-center gap-4">
+                <div class="user-profile-nav">
                     <!-- Notification Bell -->
                     <div id="notif-wrapper" style="cursor: pointer; position: relative; margin-right: 8px;">
                         <span style="font-size: 20px;">🔔</span>

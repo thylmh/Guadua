@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     DB_NAME: str = "bosquebd"
     DB_PASS: str = ""
     CLOUDSQL_CONNECTION_NAME: str = ""
+    
+    # GCP Vertex AI
+    GCP_PROJECT: str = "bosque-485105"
+    GCP_LOCATION: str = "us-central1"
 
     @property
     def cors_origins(self) -> List[str]:
