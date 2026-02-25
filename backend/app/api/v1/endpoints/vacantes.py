@@ -48,9 +48,7 @@ def get_vacantes_dashboard(user: Dict[str, Any] = Depends(get_current_user)):
                 for t in tramos:
                     if t.get("salario_base") is not None: t["salario_base"] = float(t["salario_base"])
                     if t.get("atep") is not None: t["atep"] = float(t["atep"])
-        except Exception as e:
-            print(f"DB Error in dashboard: {e}")
-            # Fallback a Mock si la DB falla
+        except Exception:
             tramos = []
             for v in MOCK_VACANTES:
                 tramos.append({
@@ -92,8 +90,6 @@ def get_vacantes_dashboard(user: Dict[str, Any] = Depends(get_current_user)):
         }
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return {"ok": False, "error": str(e)}
 
 @router.get("/consulta/{id_posicion}")
@@ -138,8 +134,7 @@ def get_individual_vacante(id_posicion: str, user: Dict[str, Any] = Depends(get_
                 q_tramos = text("SELECT * FROM BFinanciacion WHERE posicion = :id AND cedula = 'VACANTE'")
                 tramos_rows = conn.execute(q_tramos, {"id": id_posicion}).mappings().all()
                 tramos = [dict(r) for r in tramos_rows]
-        except:
-            # Mock tramos stored in memory
+        except Exception:
             tramos = [t for t in MOCK_FINANCIACION_VACANTES if t["posicion_c"] == id_posicion]
 
         # Sync tramos with necessary fields for calculation
@@ -162,8 +157,6 @@ def get_individual_vacante(id_posicion: str, user: Dict[str, Any] = Depends(get_
             "months": mensualizado
         }
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/guardar")
@@ -212,8 +205,8 @@ def save_tramo_vacante(dato: TramoFinanciacion, user: Dict[str, Any] = Depends(g
                     "cat": new_tramo["id_categoria"],
                     "resp": new_tramo["id_responsable"]
                 })
-        except Exception as e:
-            print(f"DB Error saving tramo: {e}")
+        except Exception:
+            pass  # Si falla la inserción en DB, el tramo queda solo en memoria Mock
 
         # Manejo Mock
         if dato.id:

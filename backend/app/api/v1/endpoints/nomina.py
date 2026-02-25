@@ -147,8 +147,6 @@ def get_reconciliation(
     Conciliación: Compara lo pagado (BNomina) vs lo proyectado (BFinanciacion o Snapshot) 
     """
     try:
-        print(f"DEBUG: Iniciando conciliación v_id={version_id}, p={periodo}")
-        
         # 1. Obtener Real (BNomina) agrupado por la granularidad solicitada (Manejo de ONLY_FULL_GROUP_BY)
         query_real = text("""
             SELECT 
@@ -171,7 +169,6 @@ def get_reconciliation(
             GROUP BY 1, 3, 4, 5, 6, 7, 8
         """)
         real_data = db.execute(query_real, {"p": periodo}).mappings().all()
-        print(f"DEBUG: Registros reales encontrados: {len(real_data)}")
 
         # 2. Obtener Proyectado (Snapshot o Actual)
         if version_id == 0:
@@ -203,10 +200,10 @@ def get_reconciliation(
                 LEFT JOIN BPosicion p ON c.posicion = p.IDPosicion
                 WHERE f.fecha_inicio <= LAST_DAY(STR_TO_DATE(CONCAT(:p, '-01'), '%Y-%m-%d'))
                 AND f.fecha_fin >= STR_TO_DATE(CONCAT(:p, '-01'), '%Y-%m-%d')
-                AND c.estado = 'ACTIVO'
+                AND c.estado LIKE 'Activo%'
             """)
             proj_rows = db.execute(query_proj, {"p": periodo}).mappings().all()
-            print(f"DEBUG: Tramos en actual (vivo): {len(proj_rows)}")
+    
         else:
             # USAR SNAPSHOT
             query_proj = text("""
@@ -239,8 +236,7 @@ def get_reconciliation(
                 AND s.fecha_fin >= STR_TO_DATE(CONCAT(:p, '-01'), '%Y-%m-%d')
             """)
             proj_rows = db.execute(query_proj, {"vid": version_id, "p": periodo}).mappings().all()
-            print(f"DEBUG: Tramos en snapshot: {len(proj_rows)}")
-
+    
         # Preparar para mensualizar
         tramos_dict = []
         for s in proj_rows:
@@ -270,7 +266,6 @@ def get_reconciliation(
             if p["anioMes"] == target_key:
                 proyectado_mes = p["detalle"]
                 break
-        print(f"DEBUG: Proyecciones procesadas para el mes: {len(proyectado_mes)}")
 
         # 3. Cruzar datos en memoria
         combined = {}
@@ -337,7 +332,6 @@ def get_reconciliation(
             r["brecha"] = r["pagado"] - r["presupuestado"]
             r["cumplimiento"] = (r["pagado"] / r["presupuestado"] * 100) if r["presupuestado"] > 0 else 0
             
-        print(f"DEBUG: Conciliación finalizada. Total filas: {len(final_list)}")
         return final_list
 
     except Exception as e:

@@ -136,7 +136,6 @@ def crear_snapshot(
 
     except Exception as e:
         db.rollback()
-        print(f"Error creating snapshot: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/versiones/{version_id}")
@@ -315,7 +314,6 @@ def comparar_presupuesto(version_id: int, anio: Optional[int] = None, db: Sessio
             }
         }
     except Exception as e:
-        print(f"Error en comparativa: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/versiones", response_model=List[dict])
@@ -377,7 +375,6 @@ def crear_solicitud(
 
     except Exception as e:
         db.rollback()
-        print(f"Error creating request: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/solicitudes")
@@ -516,7 +513,6 @@ def aprobar_solicitud(req_id: int, user: dict = Depends(get_current_user), db: S
         return {"ok": True, "message": "Cambios aplicados exitosamente"}
 
     except Exception as e:
-        print(f"Error approval: {e}")
         raise HTTPException(status_code=500, detail=f"Error al aprobar: {str(e)}")
 
 @router.post("/solicitudes/{req_id}/rechazar")

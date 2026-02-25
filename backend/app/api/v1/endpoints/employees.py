@@ -23,12 +23,29 @@ def check_session(user: Dict[str, Any] = Depends(get_current_user)):
     
     if user.get("source") != "local_debug":
         try:
-            query = text("SELECT p_nombre, p_apellido FROM BData WHERE correo_electronico = :email LIMIT 1")
+            # Priorizar persona con contrato Activo en caso de email duplicado
+            query = text("""
+                SELECT d.p_nombre, d.p_apellido
+                FROM BData d
+                JOIN BContrato c ON d.cedula = c.cedula
+                WHERE d.correo_electronico = :email
+                  AND c.estado LIKE 'Activo%'
+                ORDER BY c.fecha_ingreso DESC
+                LIMIT 1
+            """)
             with engine.connect() as conn:
                 row = conn.execute(query, {"email": user["email"]}).mappings().first()
                 if row:
                     nombre = f"{row['p_nombre']} {row['p_apellido']}".strip()
-        except:
+                else:
+                    # Fallback sin filtro activo
+                    fb = conn.execute(
+                        text("SELECT p_nombre, p_apellido FROM BData WHERE correo_electronico = :email LIMIT 1"),
+                        {"email": user["email"]}
+                    ).mappings().first()
+                    if fb:
+                        nombre = f"{fb['p_nombre']} {fb['p_apellido']}".strip()
+        except Exception:
             pass
 
     return {
@@ -636,9 +653,9 @@ def guardar_tramo(
                 
             # --- LOG DE AUDITORÍA CENTRAL (BAuditoria) ---
             try:
-                audit = AuditService()
+                audit_svc = AuditService(db)
                 prefijo_audit = "CREACION" if tipo_solicitud == 'CREACION' else "MODIFICACION"
-                audit.log_event(
+                audit_svc.log_event(
                     actor_email=user['email'],
                     module='Financiacion',
                     action=prefijo_audit,
