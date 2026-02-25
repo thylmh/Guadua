@@ -34,8 +34,21 @@ Thumbs.db
 cloud-sql-proxy
 
 # ==========================
-# Scripts generados en Windows (reemplazados por .sh)
+# Configuración Sensible (¡NO SUBIR!)
 # ==========================
-start_proxy.bat
-start_backend.bat
-start_frontend.bat
+env.yaml
+.env
+*.yaml
+!backend/cloudbuild.yaml
+
+# ==========================
+# Temporales y Archivos de Prueba
+# ==========================
+archived_temp/
+cleanup_log.md
+deploy_output.log
+debug_dashboard.json
+test_connection.py
+describe_table.py
+check_bposicion.py
+update_bposicion.py
