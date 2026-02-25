@@ -510,6 +510,16 @@ def aprobar_solicitud(req_id: int, user: dict = Depends(get_current_user), db: S
                 "rid": req_id
             })
 
+            # --- LOG DE AUDITORÍA CENTRAL (BAuditoria) ---
+            audit_svc = AuditService(db)
+            audit_svc.log_event(
+                actor_email=user['email'],
+                module='Financiacion',
+                action='APROBADO',
+                resource_id=str(req['id_financiacion_afectado']),
+                details=f"Aprobación de solicitud {req_id} ({tipo}) para la cédula {req.get('cedula')}. Solicitado por: {req['solicitante']}"
+            )
+
         return {"ok": True, "message": "Cambios aplicados exitosamente"}
 
     except Exception as e:
@@ -536,6 +546,16 @@ def rechazar_solicitud(req_id: int, user: dict = Depends(get_current_user), db: 
                     "msg": f"Tu solicitud de {req['tipo_solicitud']} para la cédula {req['cedula']} ha sido RECHAZADA.",
                     "rid": req_id
                 })
+            
+            # --- LOG DE AUDITORÍA CENTRAL (BAuditoria) ---
+            audit_svc = AuditService(db)
+            audit_svc.log_event(
+                actor_email=user['email'],
+                module='Financiacion',
+                action='RECHAZADO',
+                resource_id=str(req['id_financiacion_afectado']) if req else str(req_id),
+                details=f"Rechazo de solicitud {req_id} para la cédula {req.get('cedula') if req else 'N/A'}. Solicitado por: {req['solicitante'] if req else 'N/A'}"
+            )
         return {"ok": True, "message": "Solicitud rechazada"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
