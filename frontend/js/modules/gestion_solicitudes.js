@@ -21,11 +21,6 @@ export const gestionSolicitudes = {
                         <button onclick="window.gestionSolicitudes.render()" class="btn-secondary" style="padding: 8px 12px; font-size: 13px;">
                             🔄 Actualizar
                         </button>
-                        ${auth.isAdmin() ? `
-                        <button id="btn-clear-solicitudes" class="btn-secondary" style="padding: 8px 12px; font-size: 13px; color: #EF4444; border-color: #FECACA;">
-                            🗑️ Limpiar Historial
-                        </button>
-                        ` : ''}
                     </div>
                 </div>
 
@@ -113,9 +108,6 @@ export const gestionSolicitudes = {
         document.getElementById('req-filter-status').onchange = () => this.renderList();
         document.getElementById('req-filter-user').onchange = () => this.renderList();
         document.getElementById('req-filter-month').onchange = () => this.renderList();
-        document.getElementById('req-search').onkeyup = () => this.keyupHandler();
-        const clearBtn = document.getElementById('btn-clear-solicitudes');
-        if (clearBtn) clearBtn.onclick = () => this.clearAll();
 
         window.gestionSolicitudes = this;
         await this.render();
@@ -411,16 +403,5 @@ export const gestionSolicitudes = {
                 ui.hideLoading();
             }
         }, '❌');
-    },
-
-    async clearAll() {
-        if (!confirm('¿BORRAR TODO el historial de solicitudes? Esta acción no se puede deshacer.')) return;
-        try {
-            const res = await api.delete('/admin/presupuesto/solicitudes/limpiar/todo');
-            if (res.ok) {
-                ui.showToast("Historial borrado");
-                this.render();
-            }
-        } catch (e) { console.error(e); }
     }
 };
