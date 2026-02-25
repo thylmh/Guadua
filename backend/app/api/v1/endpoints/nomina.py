@@ -104,7 +104,7 @@ def get_nomina_summary(db: Session = Depends(get_db), user: Any = Depends(get_cu
 @router.delete("/nomina/month/{periodo}")
 def delete_nomina_month(periodo: str, db: Session = Depends(get_db), user: Any = Depends(get_current_user)):
     """ Borra los registros de un mes específico (YYYY-MM) """
-    require_role(user, ["admin", "nomina"])
+    require_role(user, ["admin"])
     try:
         query = text("DELETE FROM BNomina WHERE DATE_FORMAT(fec_liq, '%Y-%m') = :p")
         db.execute(query, {"p": periodo})

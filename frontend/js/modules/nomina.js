@@ -529,7 +529,9 @@ export const nomina = {
                                 <td style="padding: 16px 12px; color: #475569;">${s.registros.toLocaleString()}</td>
                                 <td style="padding: 16px 12px; font-size: 12px; color: #94A3B8;">${new Date(s.ultima_carga).toLocaleString()}</td>
                                 <td style="padding: 16px 12px; text-align: right;">
-                                    <button onclick="window.nominaModule.deleteMonth('${p}')" class="btn btn-ghost" style="color: #EF4444; font-size: 12px; font-weight: 700;">🗑️ Borrar</button>
+                                    ${auth.isAdmin() ? `
+                                        <button onclick="window.nominaModule.deleteMonth('${p}')" class="btn btn-ghost" style="color: #EF4444; font-size: 12px; font-weight: 700;">🗑️ Borrar</button>
+                                    ` : ''}
                                 </td>
                             </tr>
                             `;
