@@ -4,7 +4,7 @@ sqlalchemy
 pymysql
 pydantic
 pydantic-settings
-cloud-sql-python-connector
+cloud-sql-python-connector[pymysql]
 google-auth
 google-api-python-client
 requests
