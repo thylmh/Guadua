@@ -3,6 +3,7 @@ import threading
 from langchain_google_vertexai import ChatVertexAI
 from langchain_community.utilities import SQLDatabase
 from app.core.database import engine
+from app.core.config import settings
 
 # Global singletons
 _db = None
@@ -29,9 +30,15 @@ def get_db_instance():
     if _db is None:
         with _lock:
             if _db is None:
-                # Use the existing engine from app/core/database.py
-                # This ensures we use the Cloud SQL Connector in production
-                _db = SQLDatabase(engine, include_tables=["BContrato", "BData", "BFinanciacion", "BNomina"])
+                try:
+                    print("[AI] Inicializando conexión a DB para IA...")
+                    # Use the existing engine from app/core/database.py
+                    _db = SQLDatabase(engine, include_tables=["BContrato", "BData", "BFinanciacion", "BNomina"])
+                    print("[AI] DB inicializada exitosamente.")
+                except Exception as e:
+                    print(f"[AI] ERROR inicializando DB: {str(e)}")
+                    # Don't raise here, allow the singleton to stay None to retry or fail gracefully later
+                    return None
     return _db
 
 def get_llm():
@@ -39,12 +46,17 @@ def get_llm():
     if _llm is None:
         with _lock:
             if _llm is None:
-                _llm = ChatVertexAI(
-                    model_name="gemini-2.0-flash",
-                    project=settings.GCP_PROJECT,
-                    location=settings.GCP_LOCATION,
-                    temperature=0
-                )
+                try:
+                    print(f"[AI] Inicializando LLM ({settings.GCP_PROJECT} / {settings.GCP_LOCATION})...")
+                    _llm = ChatVertexAI(
+                        model_name="gemini-2.0-flash",
+                        project=settings.GCP_PROJECT,
+                        location=settings.GCP_LOCATION,
+                        temperature=0
+                    )
+                except Exception as e:
+                    print(f"[AI] ERROR inicializando LLM: {str(e)}")
+                    return None
     return _llm
 
 def _format_result(rows_str: str) -> str:
@@ -53,7 +65,7 @@ def _format_result(rows_str: str) -> str:
     Maintains speed by using Python instead of an LLM for formatting.
     """
     if not rows_str or rows_str.strip() in ("[]", "()", "", "None"):
-        return "No encontré resultados para esa consulta."
+        return "No encontré resultados que coincidan con tu búsqueda."
 
     # 1. Technical Cleanup (Regex/String replace for DB types)
     import re
@@ -64,18 +76,16 @@ def _format_result(rows_str: str) -> str:
     
     try:
         import ast
-        # literal_eval might still struggle with some types, fallback to generic cleanup
         rows = ast.literal_eval(clean)
         
-        if not rows: return "No hay datos."
+        if not rows: return "No encontré datos disponibles."
 
         # Case 1: Simple result (e.g. one date or one number)
         if len(rows) == 1 and len(rows[0]) == 1:
             val = str(rows[0][0])
-            # Currency formatting if it looks like a salary
             if val.replace(".", "").isdigit() and float(val) > 100000:
                 amount = float(val)
-                return f"El valor es: **${amount:,.0f}**"
+                return f"El valor encontrado es: **${amount:,.0f}**"
             return f"El resultado es: **{val}**"
 
         # Case 2: List of results
@@ -85,28 +95,31 @@ def _format_result(rows_str: str) -> str:
             for v in row:
                 if v is None: continue
                 s = str(v)
-                # Quick currency fix for list items
                 if s.replace(".", "").isdigit() and float(s) > 100000:
                     s = f"${float(s):,.0f}"
                 parts.append(s)
             lines.append(f"{i}. {' — '.join(parts)}")
         
         total = len(rows)
-        header = f"He encontrado {total} resultado{'s' if total > 1 else ''}:\n\n"
-        footer = "\n\n*(Muestro hasta 20 resultados)*" if total > 20 else ""
+        header = f"He encontrado {total} registro{'s' if total > 1 else ''}:\n\n"
+        footer = "\n\n*(Mostrando los primeros 20 resultados)*" if total > 20 else ""
         return header + "\n".join(lines) + footer
 
     except Exception:
-        # Fallback recursive cleanup if ast fails
         res = clean.replace("[", "").replace("]", "").replace("(", "").replace(")", "").replace("'", "").strip()
         if res.endswith(","): res = res[:-1]
-        return f"Aquí tienes la información:\n**{res}**"
+        return f"Aquí tienes la información encontrada:\n**{res}**"
 
 def ask_database(user_question: str, history: list = None) -> str:
     print(f"[AI] Nueva consulta: {user_question}")
     try:
         db = get_db_instance()
+        if not db:
+            return "No puedo conectarme a la base de datos en este momento."
+
         llm = get_llm()
+        if not llm:
+            return "El servicio de Inteligencia Artificial no está disponible."
 
         history_str = ""
         if history:
@@ -129,19 +142,23 @@ Pregunta: {user_question}
 SQL:"""
 
         print("[AI] Generando SQL...")
-        sql_query = llm.invoke(prompt).content.strip()
+        response = llm.invoke(prompt)
+        sql_query = response.content.strip()
         sql_query = sql_query.replace("```sql", "").replace("```", "").strip()
-        print(f"[AI] SQL: {sql_query}")
-
+        
+        # Security: ensure it's a SELECT
         if not sql_query.upper().startswith("SELECT"):
-            return "Solo puedo realizar consultas de lectura."
+            print(f"[AI] Query rechazado (no SELECT): {sql_query}")
+            return "Solo tengo permisos para realizar consultas de lectura."
 
-        print("[AI] Ejecutando...")
+        print(f"[AI] Ejecutando SQL: {sql_query}")
         result = db.run(sql_query)
-        print(f"[AI] Éxito: {len(str(result))} bytes")
+        print(f"[AI] DB Exito: {len(str(result))} bytes")
 
         return _format_result(result)
 
     except Exception as e:
-        print(f"[AI] Error: {str(e)}")
-        return f"Ocurrió un error: {str(e)}"
+        print(f"[AI] ERROR en proceso: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return f"Lo siento, ocurrió un error al procesar tu solicitud: {str(e)}"
