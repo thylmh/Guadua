@@ -25,7 +25,6 @@ GUADUA combina:
 11. [Sincronización con Novasoft](#sincronización-con-novasoft)
 12. [Despliegue a Producción](#despliegue-a-producción)
 13. [Troubleshooting](#troubleshooting)
-14. [Buenas Prácticas de Seguridad](#buenas-prácticas-de-seguridad)
 
 ## Visión General
 
@@ -247,17 +246,3 @@ Comando recomendado (macOS/Linux):
 
 - **Fallo en sync con Novasoft (`pyodbc`)**
   - Instala driver SQL Server ODBC compatible
-
-## Buenas Prácticas de Seguridad
-
-- Nunca subas `.env`, `.env.local` ni secretos reales al repositorio.
-- Mantén deshabilitado cualquier bypass de autenticación en producción.
-- Restringe autenticación y dominios a políticas corporativas.
-- Usa rotación de credenciales para DB/ERP.
-- Registra cambios críticos vía bitácora/auditoría de la aplicación.
-
----
-
-Si quieres, en el siguiente paso te puedo generar también:
-1. `README_API.md` (contrato técnico de endpoints), y
-2. `README_OPERACION.md` (runbook para soporte y operación diaria).
