@@ -1,39 +1,278 @@
-# 🌳 GUADUA - Inteligencia de Nómina
+# GUADUA
 
-Plataforma estratégica para la gestión, planeación y auditoría de la nómina institucional del Instituto Alexander von Humboldt.
+Plataforma web para planeación, control y auditoría de nómina del Instituto Alexander von Humboldt.
 
-## ✨ Características Principales (v2.5)
+GUADUA combina:
+- autenticación corporativa con Google,
+- analítica de nómina y financiación,
+- gestión de vacantes y solicitudes,
+- y un asistente IA (GuaduAI) con consultas en lenguaje natural sobre la base de datos.
 
-- **AI Database Agent:** Chatbot inteligente integrado con Vertex AI (Gemini 2.0 Flash) capaz de consultar la base de datos de nómina en lenguaje natural con respuestas instantáneas y formateadas.
-- **Modern UX/UI:** Interfaz premium diseñada para la eficiencia, con navegación dinámica basada en roles, micro-animaciones y diseño responsivo.
-- **Dashboard Estratégico:** Visión global de costos de nómina, inversión por direcciones y análisis de proyectos financiadores con filtros de Planta, Tipo y Base.
-- **Consulta Individual:** Historial detallado de cada colaborador, tramos de financiación y proyecciones de liquidación.
-- **Gestión de Vacantes:** Control de posiciones institucionales disponibles y proyección de impacto de contratación.
-- **Auditoría e Integridad:** Bitácora inmutable de seguridad y flujo de aprobación de cambios presupuestales.
+> Nota de naming: el producto es **GUADUA**, pero varios recursos técnicos conservan el nombre histórico **bosque** (`bosque-api`, bucket `bosque-frontend`, proyecto GCP `bosque-485105`).
 
-## 🛠️ Stack Tecnológico
+## Tabla de Contenido
 
-- **Backend:** FastAPI (Python 3.10+), SQLAlchemy, LangChain (SQL Utilities).
-- **IA:** Google Vertex AI (Gemini 2.0 Flash).
-- **Frontend:** Vanilla Javascript (Arquitectura Modular), CSS3 Moderno, Tabulator, SheetJS.
-- **Infraestructura:** Google Cloud Platform (Cloud Run, Cloud SQL, Vertex AI).
+1. [Visión General](#visión-general)
+2. [Arquitectura](#arquitectura)
+3. [Módulos Funcionales](#módulos-funcionales)
+4. [Stack Tecnológico](#stack-tecnológico)
+5. [Estructura del Repositorio](#estructura-del-repositorio)
+6. [Requisitos Previos](#requisitos-previos)
+7. [Variables de Entorno](#variables-de-entorno)
+8. [Ejecución Local](#ejecución-local)
+9. [API y Endpoints Clave](#api-y-endpoints-clave)
+10. [Roles y Permisos](#roles-y-permisos)
+11. [Sincronización con Novasoft](#sincronización-con-novasoft)
+12. [Despliegue a Producción](#despliegue-a-producción)
+13. [Troubleshooting](#troubleshooting)
+14. [Buenas Prácticas de Seguridad](#buenas-prácticas-de-seguridad)
 
-## 🚀 Despliegue (macOS)
+## Visión General
 
-Para desplegar la aplicación a producción, asegúrate de tener configurado `gcloud` y ejecuta:
+GUADUA está diseñada para centralizar operaciones de nómina y presupuesto:
 
-```bash
-./deploy_prod.sh
+- Consulta individual por colaborador con detalle de contratos y tramos de financiación.
+- Dashboard ejecutivo de costos, flujo y proyección mensualizada.
+- Gestión de vacantes y posiciones institucionales.
+- Flujo de solicitudes de cambio presupuestal con aprobación/rechazo.
+- Módulo de nómina real (carga, conciliación y dashboard).
+- Bitácora de auditoría para trazabilidad de acciones.
+- Chatbot IA (`/api/v1/ai/query`) para exploración de datos con lenguaje natural.
+
+## Arquitectura
+
+```mermaid
+flowchart LR
+  U[Usuario Web] --> FE[Frontend SPA\nVanilla JS]
+  FE -->|Bearer token| API[FastAPI\n/api/v1/*]
+  API --> AUTH[Google ID Token Verify]
+  API --> DB[(Cloud SQL MySQL)]
+  API --> AI[Vertex AI\nGemini 2.0 Flash]
+  JOB[Cloud Run Job\nsync_novasoft.py] --> ERP[(Novasoft SQL Server)]
+  JOB --> DB
+  FE --> GCS[Bucket estático\nbosque-frontend]
+  API --> CR[Cloud Run\nbosque-api]
 ```
 
-## 💻 Desarrollo Local
+## Módulos Funcionales
 
-1. Asegúrate de tener el proxy de Cloud SQL activo.
-2. Ejecuta el script de inicio local:
+- **Autenticación y sesión**: Google Sign-In + validación de dominio + whitelist (`BWhitelist`).
+- **Dashboard global**: indicadores financieros, mensualización, flujo de caja, reporte CARS.
+- **Consulta individual**: historial por cédula, financiación y proyección.
+- **Financiero/Presupuesto**: snapshots, comparación de versiones, solicitudes y aprobaciones.
+- **Nómina**: carga de archivos, resumen, reconciliación y tablero de ejecución.
+- **Vacantes**: inventario de posiciones vacantes y simulación de impacto.
+- **Administración**: whitelist, tablas maestras, posiciones, incrementos.
+- **Auditoría**: consulta de eventos y métricas de trazabilidad.
+- **GuaduAI**: consultas en lenguaje natural sobre tablas de negocio.
+
+## Stack Tecnológico
+
+- **Backend**: FastAPI, SQLAlchemy, PyMySQL, Pydantic.
+- **IA**: LangChain + Vertex AI (`gemini-2.0-flash`).
+- **Frontend**: SPA con JavaScript modular (sin framework), CSS, Tabulator, SheetJS.
+- **Datos**: Cloud SQL (MySQL) + integración Novasoft (SQL Server vía `pyodbc`).
+- **Infraestructura**: Google Cloud Run (servicio + job), Artifact Registry, Cloud Storage.
+
+## Estructura del Repositorio
+
+```text
+.
+├── backend/
+│   ├── app/
+│   │   ├── api/v1/endpoints/      # Endpoints de negocio
+│   │   ├── core/                  # Config, seguridad, DB
+│   │   ├── services/              # Servicios (incluye IA)
+│   │   └── main.py                # App FastAPI + static mount
+│   ├── sync_novasoft.py           # Sincronización ERP -> Cloud SQL
+│   ├── requirements.txt
+│   └── Dockerfile
+├── frontend/
+│   ├── Index.html
+│   ├── css/
+│   ├── js/
+│   │   └── modules/
+│   └── assets/
+├── run_local.sh / run_local.ps1   # Orquestación local
+├── deploy_prod.sh / deploy_prod.ps1
+├── env.yaml                       # Plantilla (placeholders)
+└── README.md
+```
+
+## Requisitos Previos
+
+- Python `3.10+` (recomendado `3.11`).
+- `gcloud` CLI autenticado.
+- `gsutil` disponible.
+- Cloud SQL Proxy en la raíz del repo:
+  - macOS/Linux: `cloud-sql-proxy`
+  - Windows: `cloud-sql-proxy.exe`
+- Para sincronización Novasoft: driver ODBC SQL Server (`msodbcsql17` o equivalente).
+
+## Variables de Entorno
+
+Configura secretos en `.env.local` (no versionado). Plantilla base en `env.yaml`.
+
+Variables clave:
 
 ```bash
+DB_USER=...
+DB_PASS=...
+DB_NAME=...
+CLOUDSQL_CONNECTION_NAME=project:region:instance
+
+ERP_USER=...
+ERP_PASS=...
+ERP_HOST=...
+ERP_PORT=5932
+ERP_DB=...
+
+ALLOWED_DOMAIN=humboldt.org.co
+CORS_ORIGINS_RAW=http://localhost:8080,http://127.0.0.1:8080,http://localhost:8000,http://127.0.0.1:8000
+AUDIENCE=...
+ALLOW_LOCAL_DEBUG_BYPASS=false
+```
+
+## Ejecución Local
+
+### Opción 1: script automatizado (macOS/Linux)
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# opcional pero recomendado para auth ADC
+gcloud auth application-default login
+
 ./run_local.sh
 ```
 
+Servicios iniciados por script:
+- Cloud SQL Proxy: `127.0.0.1:3306`
+- Backend: `http://localhost:8000` (`/docs` disponible)
+- Frontend: `http://localhost:8080`
+
+### Opción 2: script automatizado (Windows PowerShell)
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+.\run_local.ps1
+```
+
+### Modo desarrollador local (sin Google real)
+
+Si `ALLOW_LOCAL_DEBUG_BYPASS=true`, puedes usar login dev (`Bearer local`) desde localhost.
+
+## API y Endpoints Clave
+
+Base path: `/api/v1`
+
+- `GET /employees/me`
+- `GET /employees/consulta/{cedula}`
+- `GET /admin/dashboard-global`
+- `GET /admin/reporte-detallado`
+- `GET /admin/flujo-caja`
+- `POST /admin/nomina/upload`
+- `GET /admin/nomina/dashboard`
+- `POST /admin/presupuesto/solicitudes`
+- `POST /admin/presupuesto/solicitudes/{req_id}/aprobar`
+- `POST /admin/presupuesto/solicitudes/{req_id}/rechazar`
+- `GET /vacantes/dashboard`
+- `POST /ai/query`
+
+Documentación interactiva (OpenAPI):
+- `http://localhost:8000/docs`
+
+## Roles y Permisos
+
+Roles soportados por backend:
+- `admin`
+- `financiero`
+- `talento`
+- `nomina`
+- `user`
+
+Resumen de acceso funcional:
+
+- **admin**: acceso total (incluye auditoría, administración, IA, nómina, vacantes, solicitudes).
+- **financiero**: dashboard/financiero, solicitudes, nómina consulta, IA.
+- **talento**: vacantes, consulta, financiero base, IA.
+- **nomina**: nómina, vacantes, solicitudes, consulta operativa.
+- **user**: consulta general y vistas permitidas por endpoint.
+
+> El frontend oculta navegación por rol, pero la seguridad real está en backend con `require_role(...)`.
+
+## Sincronización con Novasoft
+
+Script principal:
+- `backend/sync_novasoft.py`
+
+Objetivo:
+- Cargar catálogos desde Novasoft SQL Server hacia Cloud SQL (`dim_proyectos`, `dim_fuentes`, `dim_componentes`, etc.).
+- Inserta solo diferenciales por `codigo`.
+
+Ejecución manual (ejemplo):
+
+```bash
+cd backend
+../.venv/bin/python sync_novasoft.py
+```
+
+En producción este proceso se actualiza como **Cloud Run Job** (`bosque`) durante deploy.
+
+## Despliegue a Producción
+
+Scripts oficiales:
+- macOS/Linux: `./deploy_prod.sh`
+- Windows: `./deploy_prod.ps1`
+
+Qué hace el deploy:
+
+1. Valida variables obligatorias en `.env.local`.
+2. Construye imagen Docker en Artifact Registry.
+3. Despliega servicio Cloud Run `bosque-api`.
+4. Actualiza Cloud Run Job `bosque` para sincronización.
+5. Publica frontend en bucket `gs://bosque-frontend` con metadatos correctos.
+
+Comando recomendado (macOS/Linux):
+
+```bash
+./deploy_prod.sh | tee deploy_output.log
+```
+
+## Troubleshooting
+
+- **`could not find default credentials`**
+  - Ejecuta: `gcloud auth application-default login`
+
+- **Error de conexión a DB local**
+  - Verifica Cloud SQL Proxy activo en `127.0.0.1:3306`
+  - Revisa `DB_USER`, `DB_PASS`, `DB_NAME`
+
+- **401 / sesión expirada en frontend**
+  - Reingresa vía Google Sign-In
+  - Confirma `AUDIENCE` y `ALLOWED_DOMAIN`
+
+- **CORS bloqueado**
+  - Ajusta `CORS_ORIGINS_RAW` en `.env.local`
+
+- **Fallo en sync con Novasoft (`pyodbc`)**
+  - Instala driver SQL Server ODBC compatible
+
+## Buenas Prácticas de Seguridad
+
+- Nunca subas `.env`, `.env.local` ni secretos reales al repositorio.
+- Mantén `ALLOW_LOCAL_DEBUG_BYPASS=false` en producción.
+- Restringe `ALLOWED_DOMAIN` al dominio corporativo.
+- Usa rotación de credenciales para DB/ERP.
+- Registra cambios críticos vía bitácora/auditoría de la aplicación.
+
 ---
-*Optimizado y consolidado por Antigravity - 25 de Febrero de 2026*
+
+Si quieres, en el siguiente paso te puedo generar también:
+1. `README_API.md` (contrato técnico de endpoints), y
+2. `README_OPERACION.md` (runbook para soporte y operación diaria).
