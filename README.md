@@ -18,7 +18,7 @@ GUADUA combina:
 4. [Stack Tecnológico](#stack-tecnológico)
 5. [Estructura del Repositorio](#estructura-del-repositorio)
 6. [Requisitos Previos](#requisitos-previos)
-7. [Variables de Entorno](#variables-de-entorno)
+7. [Configuración Sensible](#configuración-sensible)
 8. [Ejecución Local](#ejecución-local)
 9. [API y Endpoints Clave](#api-y-endpoints-clave)
 10. [Roles y Permisos](#roles-y-permisos)
@@ -109,29 +109,14 @@ flowchart LR
   - Windows: `cloud-sql-proxy.exe`
 - Para sincronización Novasoft: driver ODBC SQL Server (`msodbcsql17` o equivalente).
 
-## Variables de Entorno
+## Configuración Sensible
 
-Configura secretos en `.env.local` (no versionado). Plantilla base en `env.yaml`.
+La configuración de credenciales y secretos es **privada**.
 
-Variables clave:
-
-```bash
-DB_USER=...
-DB_PASS=...
-DB_NAME=...
-CLOUDSQL_CONNECTION_NAME=project:region:instance
-
-ERP_USER=...
-ERP_PASS=...
-ERP_HOST=...
-ERP_PORT=5932
-ERP_DB=...
-
-ALLOWED_DOMAIN=humboldt.org.co
-CORS_ORIGINS_RAW=http://localhost:8080,http://127.0.0.1:8080,http://localhost:8000,http://127.0.0.1:8000
-AUDIENCE=...
-ALLOW_LOCAL_DEBUG_BYPASS=false
-```
+- Usa `.env.local` para ejecución local (archivo no versionado).
+- Usa `env.yaml` solo como plantilla con placeholders, nunca con secretos reales.
+- Gestiona credenciales de producción en un gestor seguro (Secret Manager o equivalente).
+- No publiques valores de configuración sensible en documentación, tickets, capturas o commits.
 
 ## Ejecución Local
 
@@ -165,7 +150,7 @@ pip install -r requirements.txt
 
 ### Modo desarrollador local (sin Google real)
 
-Si `ALLOW_LOCAL_DEBUG_BYPASS=true`, puedes usar login dev (`Bearer local`) desde localhost.
+Existe un modo de bypass para entorno local. Actívalo únicamente en desarrollo y nunca en producción.
 
 ## API y Endpoints Clave
 
@@ -232,7 +217,7 @@ Scripts oficiales:
 
 Qué hace el deploy:
 
-1. Valida variables obligatorias en `.env.local`.
+1. Valida la configuración privada cargada desde `.env.local`.
 2. Construye imagen Docker en Artifact Registry.
 3. Despliega servicio Cloud Run `bosque-api`.
 4. Actualiza Cloud Run Job `bosque` para sincronización.
@@ -251,14 +236,14 @@ Comando recomendado (macOS/Linux):
 
 - **Error de conexión a DB local**
   - Verifica Cloud SQL Proxy activo en `127.0.0.1:3306`
-  - Revisa `DB_USER`, `DB_PASS`, `DB_NAME`
+  - Revisa que tus credenciales locales estén completas y vigentes
 
 - **401 / sesión expirada en frontend**
   - Reingresa vía Google Sign-In
-  - Confirma `AUDIENCE` y `ALLOWED_DOMAIN`
+  - Confirma que la configuración de autenticación esté correcta en tu entorno
 
 - **CORS bloqueado**
-  - Ajusta `CORS_ORIGINS_RAW` en `.env.local`
+  - Ajusta la configuración de orígenes permitidos en tu archivo local privado
 
 - **Fallo en sync con Novasoft (`pyodbc`)**
   - Instala driver SQL Server ODBC compatible
@@ -266,8 +251,8 @@ Comando recomendado (macOS/Linux):
 ## Buenas Prácticas de Seguridad
 
 - Nunca subas `.env`, `.env.local` ni secretos reales al repositorio.
-- Mantén `ALLOW_LOCAL_DEBUG_BYPASS=false` en producción.
-- Restringe `ALLOWED_DOMAIN` al dominio corporativo.
+- Mantén deshabilitado cualquier bypass de autenticación en producción.
+- Restringe autenticación y dominios a políticas corporativas.
 - Usa rotación de credenciales para DB/ERP.
 - Registra cambios críticos vía bitácora/auditoría de la aplicación.
 
