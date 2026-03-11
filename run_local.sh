@@ -44,13 +44,35 @@ echo "✅ Proxy activo (PID $PROXY_PID)"
 echo ""
 echo "🚀 Iniciando Backend en http://localhost:8000 ..."
 (
+    # Cargar variables locales opcionales (no versionadas)
+    if [ -f "$ROOT/.env.local" ]; then
+        set -a
+        # shellcheck disable=SC1091
+        source "$ROOT/.env.local"
+        set +a
+    fi
+
     export USE_TCP_CONNECTION=true
-    export DB_HOST=127.0.0.1
-    export DB_PORT=3306
-    export DB_USER=bosquebd
-    export DB_PASS=CHANGE_ME_DB_PASS
-    export DB_NAME=bosquebd
-    export CORS_ORIGINS_RAW="*"
+    export DB_HOST="${DB_HOST:-127.0.0.1}"
+    export DB_PORT="${DB_PORT:-3306}"
+    # No sobreescribir credenciales; si vienen del entorno/.env.local se respetan.
+    [ -n "${DB_USER:-}" ] && export DB_USER
+    [ -n "${DB_PASS:-}" ] && export DB_PASS
+    [ -n "${DB_NAME:-}" ] && export DB_NAME
+
+    # Validación explícita para evitar arrancar contra DB con password vacío.
+    if [ -z "${DB_USER:-}" ] || [ -z "${DB_PASS:-}" ] || [ -z "${DB_NAME:-}" ]; then
+        echo "❌ Faltan credenciales reales de BD (DB_USER/DB_PASS/DB_NAME)."
+        echo "   Define estas variables en .env.local o en tu entorno antes de iniciar."
+        exit 1
+    fi
+    if [[ "${DB_USER}" == CHANGE_ME_* ]] || [[ "${DB_PASS}" == CHANGE_ME_* ]] || [[ "${DB_NAME}" == CHANGE_ME_* ]]; then
+        echo "❌ Credenciales de BD inválidas (placeholders CHANGE_ME_* detectados)."
+        echo "   Configura valores reales en .env.local."
+        exit 1
+    fi
+    export CORS_ORIGINS_RAW="${CORS_ORIGINS_RAW:-http://localhost:8080,http://127.0.0.1:8080,http://localhost:8000,http://127.0.0.1:8000}"
+    export ALLOW_LOCAL_DEBUG_BYPASS="${ALLOW_LOCAL_DEBUG_BYPASS:-true}"
 
     cd "$ROOT/backend"
     "$PYTHON" -m uvicorn app.main:app --reload --port 8000 --host 0.0.0.0 \

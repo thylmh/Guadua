@@ -21,7 +21,10 @@ def load_env():
             if y:
                 for k, v in y.items():
                     if v is not None:
-                        os.environ[k] = str(v)
+                        val = str(v).strip()
+                        if not val or val.startswith("CHANGE_ME_"):
+                            continue
+                        os.environ.setdefault(k, val)
     else:
         print("⚠️ Advertencia: No se encontró env.yaml en la raíz.")
 
@@ -52,13 +55,20 @@ TABLAS_A_SINCRONIZAR = {
 # 3. INICIALIZAR CONECTOR CLOUD SQL
 connector = Connector()
 
+
+def _require_env(name):
+    val = os.environ.get(name, "").strip()
+    if not val or val.startswith("CHANGE_ME_"):
+        raise RuntimeError(f"Variable requerida no configurada: {name}")
+    return val
+
 def get_cloud_conn():
     return connector.connect(
-        INSTANCE_CONNECTION_NAME,
+        _require_env("CLOUDSQL_CONNECTION_NAME"),
         "pymysql",
-        user=CLOUD_USER,
-        password=CLOUD_PASS,
-        db=CLOUD_DB
+        user=_require_env("DB_USER"),
+        password=_require_env("DB_PASS"),
+        db=_require_env("DB_NAME")
     )
 
 def format_id3(val):
@@ -133,8 +143,12 @@ def run_sync():
                 break
     
     print(f"ℹ️ Usando driver: {driver}")
-    safe_erp_pass = quote_plus(ERP_PASS)
-    erp_url = f"mssql+pyodbc://{ERP_USER}:{safe_erp_pass}@{ERP_HOST}:{ERP_PORT}/{ERP_DB}?driver={quote_plus(driver)}"
+    safe_erp_pass = quote_plus(_require_env("ERP_PASS"))
+    erp_url = (
+        f"mssql+pyodbc://{_require_env('ERP_USER')}:{safe_erp_pass}"
+        f"@{_require_env('ERP_HOST')}:{ERP_PORT}/{_require_env('ERP_DB')}"
+        f"?driver={quote_plus(driver)}"
+    )
     erp_engine = create_engine(erp_url)
     
     # Engine de la nube usa el túnel de Google

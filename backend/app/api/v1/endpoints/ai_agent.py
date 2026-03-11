@@ -26,7 +26,7 @@ def query_ai_agent(
     """
     
     # Basic role-based access control
-    allowed_roles = ["TTHumano", "admin", "financiero", "talento"]
+    allowed_roles = ["admin", "financiero", "talento"]
     
     # Try singular 'role' (used in local Mock and some DB paths) or plural 'roles' list
     user_role = current_user.get("role")

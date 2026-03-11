@@ -4,6 +4,14 @@ import { ui } from '../ui.js';
 
 export const controlPresupuestal = {
     selectedYear: new Date().getFullYear(),
+    escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    },
     async load() {
         window.admin_presupuesto = this;
         await this.render();
@@ -70,20 +78,20 @@ export const controlPresupuestal = {
     async getSnapshotsHTML() {
         let kpiName = '--', kpiDate = 'No data', rows = '';
         try {
+            const esc = (v) => this.escapeHtml(v);
             const res = await api.get('/admin/presupuesto/versiones');
             if (res && res.length > 0) {
-                kpiName = res[0].nombre;
+                kpiName = esc(res[0].nombre);
                 kpiDate = new Date(res[0].fecha).toLocaleString();
                 rows = res.map(v => `
                     <tr style="border-bottom: 1px solid #F1F5F9;">
                         <td style="padding: 16px;">#${v.id}</td>
-                        <td style="padding: 16px; font-weight: 700;">${v.nombre}</td>
+                        <td style="padding: 16px; font-weight: 700;">${esc(v.nombre)}</td>
                         <td style="padding: 16px;">${new Date(v.fecha).toLocaleString()}</td>
-                        <td style="padding: 16px;">${v.desc || '-'}</td>
-                         <td style="padding: 16px; text-align: right;">
-                          <td style="padding: 16px; text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
+                        <td style="padding: 16px;">${esc(v.desc || '-')}</td>
+                        <td style="padding: 16px; text-align: right; display: flex; gap: 8px; justify-content: flex-end;">
                              <button style="color: #0F172A; background: #F1F5F9; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 11px; cursor: pointer; border: 1px solid #E2E8F0;" 
-                                onclick="window.admin_presupuesto.openComparison(${v.id}, '${v.nombre}')">📊 Comparar Actual</button>
+                                onclick='window.admin_presupuesto.openComparison(${v.id}, ${JSON.stringify(String(v.nombre ?? ""))})'>📊 Comparar Actual</button>
                              <button style="color: #EF4444; background: #FEF2F2; padding: 6px 12px; border-radius: 6px; font-weight: 700; font-size: 11px; cursor: pointer; border: 1px solid #FECACA;" 
                                 onclick="window.admin_presupuesto.deleteVersion(${v.id})">🗑️ Eliminar</button>
                         </td>
@@ -142,6 +150,7 @@ export const controlPresupuestal = {
     async openComparison(id, name) {
         ui.showToast("Cargando comparativa...");
         try {
+            const esc = (v) => this.escapeHtml(v);
             const data = await api.get(`/admin/presupuesto/comparar/${id}?anio=${this.selectedYear}`);
             const k = data.kpis;
 
@@ -152,7 +161,7 @@ export const controlPresupuestal = {
                 const pColor = p.diff > 0 ? '#EF4444' : (p.diff < 0 ? '#10B981' : '#64748B');
                 return `
                     <tr style="border-bottom: 1px solid #F1F5F9;">
-                        <td style="padding: 12px; font-size: 13px;">${p.proyecto}</td>
+                        <td style="padding: 12px; font-size: 13px;">${esc(p.proyecto)}</td>
                         <td style="padding: 12px; font-size: 13px; text-align: right;">${fmt(p.base)}</td>
                         <td style="padding: 12px; font-size: 13px; text-align: right; font-weight: 600;">${fmt(p.actual)}</td>
                         <td style="padding: 12px; font-size: 13px; text-align: right; font-weight: 800; color: ${pColor};">
@@ -169,15 +178,15 @@ export const controlPresupuestal = {
 
             // Details for structure changes
             const structRows = [
-                ...data.detalle_cambios.nuevos.map(x => `<tr style="color: #10B981;"><td style="${tdStyle}">NEW</td><td style="${tdStyle}">${x.nombre}</td><td style="${tdStyle}">${x.id_proyecto}</td><td style="${tdStyle}; text-align: right;">${fmt(x.salario_t)}</td></tr>`),
-                ...data.detalle_cambios.eliminados.map(x => `<tr style="color: #EF4444;"><td style="${tdStyle}">DEL</td><td style="${tdStyle}">${x.nombre}</td><td style="${tdStyle}">${x.id_proyecto}</td><td style="${tdStyle}; text-align: right;">-${fmt(x.salario_t)}</td></tr>`)
+                ...data.detalle_cambios.nuevos.map(x => `<tr style="color: #10B981;"><td style="${tdStyle}">NEW</td><td style="${tdStyle}">${esc(x.nombre)}</td><td style="${tdStyle}">${esc(x.id_proyecto)}</td><td style="${tdStyle}; text-align: right;">${fmt(x.salario_t)}</td></tr>`),
+                ...data.detalle_cambios.eliminados.map(x => `<tr style="color: #EF4444;"><td style="${tdStyle}">DEL</td><td style="${tdStyle}">${esc(x.nombre)}</td><td style="${tdStyle}">${esc(x.id_proyecto)}</td><td style="${tdStyle}; text-align: right;">-${fmt(x.salario_t)}</td></tr>`)
             ].join('');
 
             // Details for value changes
             const modRows = data.detalle_cambios.modificados.map(x => `
                 <tr>
-                    <td style="${tdStyle}">${x.nombre}</td>
-                    <td style="${tdStyle}">${x.id_proyecto}</td>
+                    <td style="${tdStyle}">${esc(x.nombre)}</td>
+                    <td style="${tdStyle}">${esc(x.id_proyecto)}</td>
                     <td style="${tdStyle}; text-align: right;">${fmt(x.valor_base)}</td>
                     <td style="${tdStyle}; text-align: right;">${fmt(x.valor_actual)}</td>
                     <td style="${tdStyle}; text-align: right; font-weight: 700; color: ${x.diff > 0 ? '#EF4444' : '#10B981'};">${x.diff > 0 ? '+' : ''}${fmt(x.diff)}</td>
@@ -260,7 +269,7 @@ export const controlPresupuestal = {
                 </div>
             `;
 
-            ui.openModal(`Análisis: ${name} vs Estado Actual`, html);
+            ui.openModal(`Análisis: ${esc(name)} vs Estado Actual`, html);
         } catch (e) {
             console.error(e);
             alert("Error al cargar la comparativa");

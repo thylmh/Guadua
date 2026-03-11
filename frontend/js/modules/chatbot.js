@@ -3,10 +3,10 @@ import { auth } from './auth.js';
 let chatHistory = [];
 
 export function renderChatbotWidget() {
-    // Only render for admins or TTHumano
-    const isAdmin = auth._user?.role && (auth._user.role === 'admin' || auth._user.role === 'TTHumano');
-
-    if (!isAdmin) return;
+    // Only render for allowed roles
+    const allowedRoles = ['admin', 'financiero', 'talento'];
+    const userRole = auth._user?.role;
+    if (!userRole || !allowedRoles.includes(userRole)) return;
 
     // Create widget container if it doesn't exist
     if (document.getElementById('chatbot-widget')) return;
@@ -16,25 +16,28 @@ export function renderChatbotWidget() {
 
     widget.innerHTML = `
         <button id="chatbot-toggle" title="Asistente IA">
-            ✨
+            🎋
         </button>
         <div id="chatbot-panel">
             <div class="chatbot-header">
-                <h3><span>✨</span> Guadua AI Copilot</h3>
+                <h3><span>🎋</span> GuaduAI</h3>
                 <button class="chatbot-close" id="chatbot-close-btn">✕</button>
             </div>
             <div class="chatbot-messages" id="chatbot-messages">
                 <div class="chat-bubble ai">
-                    Hola ${auth._user ? auth._user.given_name : ''}! Soy el Asistente de IA de Guadua. Puedo ayudarte consultando la base de datos. ¿Qué necesitas saber hoy?
+                    Hola ${auth._user?.nombre ? auth._user.nombre.split(' ')[0] : ''}! Soy GuaduAI. Puedo consultar toda la base de datos del Instituto Humboldt.
+
+Pregúntame sobre empleados, contratos, nómina, proyectos, financiación, vacantes y más. 🌿
                     <div class="chatbot-suggestions">
-                        <span class="suggestion-chip">¿Cuántos empleados hay en total?</span>
-                        <span class="suggestion-chip">Ver lista de proyectos</span>
+                        <span class="suggestion-chip">¿Cuántos empleados activos hay?</span>
                         <span class="suggestion-chip">¿Quiénes vencen contrato este mes?</span>
+                        <span class="suggestion-chip">Empleados por dirección</span>
+                        <span class="suggestion-chip">Posiciones vacantes</span>
                     </div>
                 </div>
             </div>
             <div class="chatbot-warning">
-                ⚠️ El asistente está aprendiendo y puede dar datos inexactos. Verifique información crítica.
+                ⚠️ El asistente puede dar datos inexactos. Verifique información crítica.
             </div>
             <div class="chatbot-input-area">
                 <input type="text" id="chatbot-input" class="chatbot-input" placeholder="Pregúntale a tus datos en lenguaje natural..." autocomplete="off">
@@ -88,18 +91,42 @@ function addMessage(text, sender) {
     const messagesContainer = document.getElementById('chatbot-messages');
     const bubble = document.createElement('div');
     bubble.className = `chat-bubble ${sender}`;
-    // Use innerText for user messages (XSS-safe), allow basic line breaks for AI
+
     if (sender === 'user') {
         bubble.textContent = text;
     } else {
-        // Render newlines as <br> for AI responses — strip unsafe tags first
-        const safe = text
+        // Render markdown-like formatting for AI responses
+        let safe = text
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/\n/g, '<br>');
+            .replace(/>/g, '&gt;');
+
+        // Bold: **text** → <strong>text</strong>
+        safe = safe.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+        // Newlines → <br>
+        safe = safe.replace(/\n/g, '<br>');
+
         bubble.innerHTML = safe;
+
+        // Add feedback buttons for AI responses
+        const feedbackDiv = document.createElement('div');
+        feedbackDiv.className = 'chatbot-feedback';
+        feedbackDiv.innerHTML = `
+            <span class="feedback-label">¿Fue útil?</span>
+            <button class="feedback-btn thumbs-up" title="Sí, fue útil">👍</button>
+            <button class="feedback-btn thumbs-down" title="No fue útil">👎</button>
+        `;
+        bubble.appendChild(feedbackDiv);
+
+        // Handle feedback clicks
+        feedbackDiv.querySelector('.thumbs-up').addEventListener('click', (e) => {
+            e.target.closest('.chatbot-feedback').innerHTML = '<span class="feedback-done">✅ ¡Gracias!</span>';
+        });
+        feedbackDiv.querySelector('.thumbs-down').addEventListener('click', (e) => {
+            e.target.closest('.chatbot-feedback').innerHTML = '<span class="feedback-done">📝 Gracias por el feedback</span>';
+        });
     }
+
     messagesContainer.appendChild(bubble);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
 }

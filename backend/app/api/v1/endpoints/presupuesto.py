@@ -51,6 +51,7 @@ def crear_snapshot(
     Toma una fotografía inmutable de BFinanciacion.
     Esta operación puede tardar unos segundos dependiendo del volumen de datos.
     """
+    require_role(current_user, ["admin"])
     # 1. Crear el registro de la versión
     try:
         # Insert Version
@@ -60,7 +61,7 @@ def crear_snapshot(
         """), {
             "nom": snapshot_in.nombre_version,
             "desc": snapshot_in.descripcion,
-            "user": getattr(current_user, "email", "admin")
+            "user": current_user.get("email", "admin")
         })
         db.commit()
         
@@ -145,6 +146,7 @@ def eliminar_version(
     current_user: Any = Depends(get_current_user), # Admin Only
 ):
     """ Elimina una versión y todos sus datos históricos asociados """
+    require_role(current_user, ["admin"])
     try:
         # 1. Borrar detalle (Snapshot data)
         db.execute(text("DELETE FROM BFinanciacion_Snapshot WHERE version_id = :vid"), {"vid": version_id})
@@ -163,11 +165,17 @@ def eliminar_version(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/comparar/{version_id}")
-def comparar_presupuesto(version_id: int, anio: Optional[int] = None, db: Session = Depends(get_db)):
+def comparar_presupuesto(
+    version_id: int,
+    anio: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_user)
+):
     """ 
     Compara una versión congelada vs el estado actual de BFinanciacion
     Calcula desviaciones y KPIs de impacto.
     """
+    require_role(current_user, ["admin"])
     try:
         target_year = anio if anio else datetime.datetime.now().year
         
@@ -317,8 +325,12 @@ def comparar_presupuesto(version_id: int, anio: Optional[int] = None, db: Sessio
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/versiones", response_model=List[dict])
-def listar_versiones(db: Session = Depends(get_db)):
+def listar_versiones(
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_user)
+):
     """ Listar historial de fotos tomadas """
+    require_role(current_user, ["admin", "financiero", "talento", "nomina"])
     res = db.execute(text("SELECT id, nombre_version, fecha_creacion, descripcion FROM Presupuesto_Versiones ORDER BY id DESC")).fetchall()
     return [{"id": r[0], "nombre": r[1], "fecha": r[2], "desc": r[3]} for r in res]
 
@@ -329,6 +341,7 @@ def crear_solicitud(
     current_user: Any = Depends(get_current_user)
 ):
     """ Registra una solicitud de cambio para aprobación """
+    require_role(current_user, ["admin", "user", "financiero", "talento", "nomina"])
     try:
         # 1. Validar existencia y obtener valor actual
         # Sanitización MUY básica para el nombre del campo, idealmente validar contra una lista blanca
@@ -367,7 +380,7 @@ def crear_solicitud(
             "old": json.dumps(old_data),
             "new": json.dumps(new_data),
             "just": sol.justificacion,
-            "user": getattr(current_user, 'email', 'unknown')
+            "user": current_user.get("email", "unknown")
         })
         db.commit()
         
@@ -378,8 +391,12 @@ def crear_solicitud(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/solicitudes")
-def listar_solicitudes(db: Session = Depends(get_db)):
+def listar_solicitudes(
+    db: Session = Depends(get_db),
+    current_user: Any = Depends(get_current_user)
+):
     """ Listar solicitudes de cambio pendientes """
+    require_role(current_user, ["admin", "financiero", "nomina"])
     stmt = text("""
         SELECT id, tipo_solicitud, id_financiacion_afectado, cedula, 
                datos_anteriores, datos_nuevos, justificacion, estado, 
@@ -528,11 +545,23 @@ def aprobar_solicitud(req_id: int, user: dict = Depends(get_current_user), db: S
 @router.post("/solicitudes/{req_id}/rechazar")
 def rechazar_solicitud(req_id: int, user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     """ Rechaza una solicitud """
-    require_role(user, ["admin"])
+    require_role(user, ["admin", "financiero", "talento", "nomina"])
     try:
         with db.bind.begin() as conn:
-            # Obtener datos para la notificación
-            req = conn.execute(text("SELECT solicitante, tipo_solicitud, cedula FROM BSolicitud_Cambio WHERE id = :id"), {"id": req_id}).mappings().first()
+            # Obtener datos para la notificación y validación
+            req = conn.execute(text("SELECT solicitante, tipo_solicitud, cedula, id_financiacion_afectado, estado FROM BSolicitud_Cambio WHERE id = :id FOR UPDATE"), {"id": req_id}).mappings().first()
+            
+            if not req:
+                raise HTTPException(status_code=404, detail="Solicitud no encontrada")
+                
+            # Verificar privilegios de rechazo/cancelación
+            user_role = user.get("role")
+            if user_role not in ["admin", "nomina"]:
+                if req.get("solicitante") != user.get("email"):
+                    raise HTTPException(status_code=403, detail="Solo puedes confirmar/cancelar solicitudes que tú introdujiste.")
+
+            if req['estado'] != 'PENDIENTE':
+                raise HTTPException(status_code=400, detail=f"La solicitud ya está en estado {req['estado']}")
             
             conn.execute(text("UPDATE BSolicitud_Cambio SET estado = 'RECHAZADO', aprobador = :ap, fecha_aprobacion = CONVERT_TZ(NOW(), '+00:00', '-05:00') WHERE id = :rid"),
                          {"ap": user['email'], "rid": req_id})

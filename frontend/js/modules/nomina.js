@@ -93,6 +93,7 @@ export const nomina = {
                     <span style="color: var(--secondary); font-weight: 700; font-size: 13px;">Explorar Datos →</span>
                 </div>
 
+                ${(auth.isAdmin() || (auth._user && auth._user.role === 'nomina')) ? `
                 <div class="span-6 luxury-card" style="padding: 32px; display: flex; flex-direction: column; justify-content: space-between; min-height: 240px; cursor: pointer; border-left: 4px solid #10B981; transition: transform 0.2s;" onclick="window.nominaModule.showTab('carga')">
                     <div>
                         <div style="width: 48px; height: 48px; background: #ECFDF5; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">📤</div>
@@ -101,6 +102,7 @@ export const nomina = {
                     </div>
                     <span style="color: #10B981; font-weight: 700; font-size: 13px;">Gestionar Cargas →</span>
                 </div>
+                ` : ''}
 
                 <div class="span-6 luxury-card" style="padding: 32px; display: flex; flex-direction: column; justify-content: space-between; min-height: 240px; cursor: pointer; border-left: 4px solid #F59E0B; transition: transform 0.2s;" onclick="window.nominaModule.showTab('ejecucion')">
                     <div>

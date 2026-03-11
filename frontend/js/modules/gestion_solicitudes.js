@@ -5,6 +5,14 @@ import { auth } from './auth.js';
 export const gestionSolicitudes = {
     requests: [],
     catalogs: null,
+    escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    },
 
     async load() {
         const target = document.getElementById('solicitudes-container');
@@ -136,11 +144,12 @@ export const gestionSolicitudes = {
     populateUserFilter() {
         const select = document.getElementById('req-filter-user');
         if (!select) return;
+        const esc = (v) => this.escapeHtml(v);
         const current = select.value;
         const users = [...new Set(this.requests.map(r => r.solicitante).filter(Boolean))].sort();
 
         select.innerHTML = '<option value="ALL">👤 Todos los Solicitantes</option>' +
-            users.map(u => `<option value="${u}">${u}</option>`).join('');
+            users.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join('');
 
         if (users.includes(current)) {
             select.value = current;
@@ -193,9 +202,16 @@ export const gestionSolicitudes = {
         }
 
         tbody.innerHTML = filtered.map(r => {
-            const tipo = r.tipo_solicitud || 'N/A';
-            const fid = r.id_financiacion_afectado || 'N/A';
-            const cedula = r.cedula || '-';
+            const esc = (v) => this.escapeHtml(v);
+            const tipoRaw = String(r.tipo_solicitud || 'N/A');
+            const estadoRaw = String(r.estado || 'N/A');
+            const tipo = esc(tipoRaw);
+            const estado = esc(estadoRaw);
+            const tipoClass = tipoRaw.replace(/[^a-zA-Z0-9_-]/g, '');
+            const estadoClass = estadoRaw.replace(/[^a-zA-Z0-9_-]/g, '');
+            const fid = esc(r.id_financiacion_afectado || 'N/A');
+            const cedulaRaw = String(r.cedula || '-');
+            const cedula = esc(cedulaRaw);
             const fecha = r.fecha_solicitud;
 
             let diffHtml = '';
@@ -212,42 +228,51 @@ export const gestionSolicitudes = {
                 const oldD = r.datos_anteriores ? (typeof r.datos_anteriores === 'string' ? JSON.parse(r.datos_anteriores) : r.datos_anteriores) : {};
                 const newD = r.datos_nuevos ? (typeof r.datos_nuevos === 'string' ? JSON.parse(r.datos_nuevos) : r.datos_nuevos) : {};
 
-                if (tipo === 'MODIFICACION') {
+                if (tipoRaw === 'MODIFICACION') {
                     const changes = [];
                     for (const key in newD) {
                         if (['modifico', 'fecha_modificacion', 'id_financiacion', 'pago_proyectado'].includes(key)) continue;
                         if (newD[key] != oldD[key] && newD[key] !== undefined) {
                             let valStr = newD[key];
                             if (key.includes('salario') || key === 'valor_mensual') valStr = ui.money(newD[key]);
-                            changes.push(`<div style="font-size: 11px;"><b>${fieldLabels[key] || key}:</b> <span style="color: #10B981; font-weight: 600;">➝ ${valStr}</span></div>`);
+                            changes.push(`<div style="font-size: 11px;"><b>${esc(fieldLabels[key] || key)}:</b> <span style="color: #10B981; font-weight: 600;">➝ ${esc(valStr)}</span></div>`);
                         }
                     }
                     diffHtml = changes.slice(0, 2).join('') + (changes.length > 2 ? '...' : '');
                     if (!diffHtml) diffHtml = '<span style="color: #94A3B8;">(Sin cambios detectados)</span>';
-                } else if (tipo === 'CREACION') {
+                } else if (tipoRaw === 'CREACION') {
                     diffHtml = `<div style="color: #10B981; font-weight: 800; font-size: 11px;">✨ Nuevo: ${ui.money(newD.salario_base || 0)}</div>`;
                 } else {
                     diffHtml = `<div style="color: #EF4444; font-size: 11px; font-weight: 700;">🗑️ ELIMINAR REGISTRO</div>`;
                 }
             } catch (e) { diffHtml = 'Err data'; }
 
+            const isCreator = auth._user?.email === r.solicitante;
             const canApprove = auth.isAdmin();
-            const actions = (r.estado === 'PENDIENTE' && canApprove) ? `
-                <div style="display: flex; gap: 4px; justify-content: flex-end;">
-                    <button onclick="window.gestionSolicitudes.approve(${r.id})" class="action-btn btn-approve">✅</button>
-                    <button onclick="window.gestionSolicitudes.reject(${r.id})" class="action-btn btn-reject">❌</button>
-                </div>
-            ` : `<span style="color: #64748B; font-size: 10px; font-weight: 700;">${r.estado}</span>`;
+            const canReject = auth.isAdmin() || auth._user?.role === 'nomina' || (auth._user?.role === 'financiero' && isCreator);
+            
+            let actionsHtml = `<span style="color: #64748B; font-size: 10px; font-weight: 700;">${estado}</span>`;
+            if (r.estado === 'PENDIENTE' && (canApprove || canReject)) {
+                actionsHtml = `<div style="display: flex; gap: 4px; justify-content: flex-end;">`;
+                if (canApprove) {
+                    actionsHtml += `<button onclick="window.gestionSolicitudes.approve(${r.id})" class="action-btn btn-approve" title="Aprobar">✅</button>`;
+                }
+                if (canReject) {
+                    actionsHtml += `<button onclick="window.gestionSolicitudes.reject(${r.id})" class="action-btn btn-reject" title="Rechazar/Cancelar">❌</button>`;
+                }
+                actionsHtml += `</div>`;
+            }
+            const actions = actionsHtml;
 
             return `
                 <tr class="req-row" style="border-bottom: 1px solid #F1F5F9;">
-                    <td style="padding: 12px 16px;"><span class="badge badge-${tipo}" style="font-size: 9px;">${tipo}</span></td>
+                    <td style="padding: 12px 16px;"><span class="badge badge-${tipoClass}" style="font-size: 9px;">${tipo}</span></td>
                     <td style="padding: 12px 16px; font-family: monospace; font-size: 11px; color: #64748B;">${fid}</td>
                     <td style="padding: 12px 16px; font-weight: 700; color: #0F172A;">
                         <div style="display: flex; align-items: center; gap: 8px;">
                             ${cedula}
-                            ${cedula !== '-' ? `
-                            <button onclick="window.navigateToConsulta('${cedula}')" class="action-btn" title="Ir a Consulta Individual" 
+                            ${cedulaRaw !== '-' ? `
+                            <button onclick='window.navigateToConsulta(${JSON.stringify(cedulaRaw)})' class="action-btn" title="Ir a Consulta Individual" 
                                 style="padding: 4px 6px; background: #EEF2FF; color: #4F46E5; border: 1px solid #C7D2FE;">
                                 👤
                             </button>
@@ -260,7 +285,7 @@ export const gestionSolicitudes = {
                             🔍
                         </button>
                     </td>
-                    <td style="padding: 12px 16px;"><span class="badge badge-${r.estado}">${r.estado}</span></td>
+                    <td style="padding: 12px 16px;"><span class="badge badge-${estadoClass}">${estado}</span></td>
                     <td style="padding: 12px 16px; text-align: right;">${actions}</td>
                 </tr>
             `;
@@ -270,6 +295,7 @@ export const gestionSolicitudes = {
     viewDetail(id) {
         const r = this.requests.find(req => req.id === id);
         if (!r) return;
+        const esc = (v) => this.escapeHtml(v);
 
         const oldD = r.datos_anteriores ? (typeof r.datos_anteriores === 'string' ? JSON.parse(r.datos_anteriores) : r.datos_anteriores) : {};
         const newD = r.datos_nuevos ? (typeof r.datos_nuevos === 'string' ? JSON.parse(r.datos_nuevos) : r.datos_nuevos) : {};
@@ -316,9 +342,9 @@ export const gestionSolicitudes = {
 
             rowsHtml += `
                 <tr style="border-bottom: 1px solid #EDF2F7;">
-                    <td style="padding: 10px; font-weight: 700; color: #4A5568; font-size: 11px;">${label}</td>
-                    <td style="padding: 10px; color: #E53E3E; text-decoration: line-through; font-size: 12px;">${format(valOld)}</td>
-                    <td style="padding: 10px; color: #38A169; font-weight: 700; font-size: 12px;">${format(valNew)}</td>
+                    <td style="padding: 10px; font-weight: 700; color: #4A5568; font-size: 11px;">${esc(label)}</td>
+                    <td style="padding: 10px; color: #E53E3E; text-decoration: line-through; font-size: 12px;">${esc(format(valOld))}</td>
+                    <td style="padding: 10px; color: #38A169; font-weight: 700; font-size: 12px;">${esc(format(valNew))}</td>
                 </tr>
             `;
         });
@@ -327,13 +353,13 @@ export const gestionSolicitudes = {
             <div style="font-family: inherit;">
                 <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
                     <div style="font-size: 12px; color: #718096;">
-                        <div><b>Solicitante:</b> ${r.solicitante}</div>
+                        <div><b>Solicitante:</b> ${esc(r.solicitante)}</div>
                         <div><b>Fecha:</b> ${new Date(r.fecha_solicitud).toLocaleString()}</div>
                     </div>
                     ${r.cedula ? `
-                    <button onclick="window.ui.closeModal(); window.navigateToConsulta('${r.cedula}')" class="btn-secondary" 
+                    <button onclick='window.ui.closeModal(); window.navigateToConsulta(${JSON.stringify(String(r.cedula))})' class="btn-secondary" 
                         style="padding: 6px 10px; font-size: 11px; display: flex; align-items: center; gap: 6px; border-color: #C7D2FE; color: #4F46E5; background: #F5F7FF;">
-                        👤 Ir a Consulta de ${r.cedula}
+                        👤 Ir a Consulta de ${esc(r.cedula)}
                     </button>
                     ` : ''}
                 </div>
@@ -353,15 +379,26 @@ export const gestionSolicitudes = {
 
                 <div style="background: #F0F9FF; border: 1px solid #BEE3F8; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
                     <div style="font-weight: 800; font-size: 10px; color: #2B6CB0; text-transform: uppercase; margin-bottom: 4px;">Justificación:</div>
-                    <div style="font-size: 13px; color: #2D3748;">${r.justificacion || 'No especificada'}</div>
+                    <div style="font-size: 13px; color: #2D3748;">${esc(r.justificacion || 'No especificada')}</div>
                 </div>
 
-                ${(r.estado === 'PENDIENTE' && auth.isAdmin()) ? `
-                <div style="display: flex; gap: 12px; padding-top: 10px;">
-                    <button onclick="window.gestionSolicitudes.approve(${r.id}, true)" class="btn btn-primary" style="flex: 2; justify-content: center; background: #22C55E;">Aprobar Cambio</button>
-                    <button onclick="window.gestionSolicitudes.reject(${r.id}, true)" class="btn btn-ghost" style="flex: 1; justify-content: center; color: #E53E3E; border: 1px solid #FECACA;">Rechazar</button>
-                </div>
-                ` : ''}
+                ${(() => {
+                    const isCreator = auth._user?.email === r.solicitante;
+                    const canApprove = auth.isAdmin();
+                    const canReject = auth.isAdmin() || auth._user?.role === 'nomina' || (auth._user?.role === 'financiero' && isCreator);
+                    if (r.estado !== 'PENDIENTE' || (!canApprove && !canReject)) return '';
+                    let htmlBtns = '<div style="display: flex; gap: 12px; padding-top: 10px;">';
+                    if (canApprove) {
+                        htmlBtns += `<button onclick="window.gestionSolicitudes.approve(${r.id}, true)" class="btn btn-primary" style="flex: 2; justify-content: center; background: #22C55E;">Aprobar Cambio</button>`;
+                    }
+                    if (canReject) {
+                        const btnText = canApprove ? 'Rechazar' : 'Cancelar Solicitud';
+                        const flexSize = canApprove ? 1 : 2;
+                        htmlBtns += `<button onclick="window.gestionSolicitudes.reject(${r.id}, true)" class="btn btn-ghost" style="flex: ${flexSize}; justify-content: center; color: #E53E3E; border: 1px solid #FECACA;">${btnText}</button>`;
+                    }
+                    htmlBtns += '</div>';
+                    return htmlBtns;
+                })()}
             </div>
         `;
 
@@ -396,11 +433,14 @@ export const gestionSolicitudes = {
                 const res = await api.post(`/admin/presupuesto/solicitudes/${id}/rechazar`);
                 ui.hideLoading();
                 if (res.ok) {
-                    ui.showToast("Solicitud rechazada");
+                    ui.showToast("Solicitud rechazada", "success");
                     this.render();
+                } else {
+                    alert("Error: " + (res.detail || res.message || "Error desconocido"));
                 }
             } catch (e) {
                 ui.hideLoading();
+                alert("Error de conexión al rechazar");
             }
         }, '❌');
     }

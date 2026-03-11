@@ -2,23 +2,38 @@
  * auth.js - Authentication Module
  */
 
+import { renderChatbotWidget } from './chatbot.js';
+
 export const auth = {
     _token: localStorage.getItem('user_token'),
     _user: JSON.parse(localStorage.getItem('user_info')),
     _clientId: "516412770014-7btmbo0e2kdj8ictqj3j6ksvfc2gmu8e.apps.googleusercontent.com",
+    _googleRetryCount: 0,
+    _sessionExpiredHandled: false,
+    _sessionExpiryTimer: null,
 
     initGoogleAuth() {
-        if (!window.google) return;
+        const slot = document.getElementById("google-login-btn");
+        if (!slot) return;
+        const isLocalHost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-        // Localhost logic: show Dev Access and skip Google Auth init
-        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        // Localhost logic: keep Dev Access visible, but do not block Google Sign-In.
+        if (isLocalHost) {
             const devContainer = document.getElementById("dev-access-container");
             if (devContainer) devContainer.classList.remove('hidden');
+        }
 
-            const btn = document.getElementById("google-login-btn");
-            if (btn) btn.innerHTML = '<div style="color:var(--text-muted); font-size:12px;">Google Login deshabilitado en local</div>';
+        if (!window.google?.accounts?.id) {
+            if (this._googleRetryCount < 20) {
+                this._googleRetryCount += 1;
+                setTimeout(() => this.initGoogleAuth(), 200);
+            } else {
+                slot.innerHTML = '<div style="color:#B91C1C; font-size:12px; font-weight:600;">No fue posible cargar Google Sign-In.</div>';
+                this._setLoginError('No se pudo cargar el proveedor de Google. Revisa bloqueadores de contenido o red corporativa.');
+            }
             return;
         }
+        this._googleRetryCount = 0;
 
         try {
             google.accounts.id.initialize({
@@ -26,16 +41,20 @@ export const auth = {
                 callback: (res) => this._handleCredentialResponse(res)
             });
 
+            const buttonWidth = Math.min(380, Math.max(240, Math.floor(slot.clientWidth || 320)));
             google.accounts.id.renderButton(
-                document.getElementById("google-login-btn"),
-                { theme: "outline", size: "large", width: 300 }
+                slot,
+                { theme: "outline", size: "large", width: buttonWidth, shape: "pill", text: "signin_with" }
             );
+            this._clearLoginError();
         } catch (e) {
             console.error("Google Auth error:", e);
+            this._setLoginError('Error inicializando Google Sign-In. Intenta recargar la página.');
         }
     },
 
     loginAsDeveloper() {
+        this._clearSessionExpiryTimer();
         this._token = 'local';
         localStorage.setItem('user_token', this._token);
         this.checkSession();
@@ -68,6 +87,7 @@ export const auth = {
                 };
                 localStorage.setItem('user_info', JSON.stringify(this._user));
                 this.hideLogin();
+                renderChatbotWidget();
                 // Maintain the role in current session
                 window.location.hash = '#/home';
                 return;
@@ -84,15 +104,23 @@ export const auth = {
             if (res.ok) {
                 const data = await res.json();
                 this._user = data.user;
+                this._sessionExpiredHandled = false;
                 localStorage.setItem('user_info', JSON.stringify(this._user));
                 this.hideLogin();
+                this._scheduleSessionExpiry();
+                renderChatbotWidget();
                 window.location.hash = '#/home';
             } else {
-                throw new Error("Sesión expirada");
+                let detail = `Error de autenticación (${res.status})`;
+                try {
+                    const payload = await res.json();
+                    detail = payload?.detail || detail;
+                } catch (_) { }
+                throw new Error(detail);
             }
         } catch (err) {
             console.error(err);
-            this.logout();
+            this.handleAuthFailure(err?.message || 'No fue posible validar la sesión');
         }
     },
 
@@ -108,16 +136,21 @@ export const auth = {
         const loginView = document.getElementById('login-view');
         const mainLayout = document.getElementById('main-layout');
 
+        document.body.classList.add('login-mode');
         if (loginView) loginView.classList.remove('hidden');
         if (mainLayout) mainLayout.classList.add('hidden');
+        this._clearLoginError();
+        this._bindLoginCardFx();
     },
 
     hideLogin() {
         const loginView = document.getElementById('login-view');
         const mainLayout = document.getElementById('main-layout');
 
+        document.body.classList.remove('login-mode');
         if (loginView) loginView.classList.add('hidden');
         if (mainLayout) mainLayout.classList.remove('hidden');
+        this._resetLoginCardFx();
 
         const fullName = this._user?.nombre || '';
         const nameParts = fullName.split(' ').filter(p => p.trim() !== '');
@@ -140,10 +173,10 @@ export const auth = {
 
         // Role-based Nav Visibility
         if (role === 'admin') {
-            document.querySelectorAll('.admin-only, .financiero-access, .talento-access').forEach(el => el.classList.remove('hidden'));
+            document.querySelectorAll('.admin-only, .financiero-access, .talento-access, .nomina-access').forEach(el => el.classList.remove('hidden'));
         } else if (role === 'financiero') {
             document.querySelectorAll('.financiero-access').forEach(el => el.classList.remove('hidden'));
-            document.querySelectorAll('.admin-only, .talento-access').forEach(el => {
+            document.querySelectorAll('.admin-only, .talento-access, .nomina-access').forEach(el => {
                 if (!el.classList.contains('financiero-access')) {
                     el.classList.add('hidden');
                 }
@@ -156,7 +189,7 @@ export const auth = {
                 }
             });
         } else if (role === 'nomina') {
-            // Nomina role is equal to Talento but with Nomina module access
+            // Nomina role is equal to Talento but with Nomina and Solicitudes access
             document.querySelectorAll('.talento-access, .nomina-access').forEach(el => el.classList.remove('hidden'));
             document.querySelectorAll('.admin-only, .financiero-access').forEach(el => {
                 if (!el.classList.contains('talento-access') && !el.classList.contains('nomina-access')) {
@@ -168,13 +201,108 @@ export const auth = {
         }
     },
 
-    logout() {
+    _bindLoginCardFx() {
+        // Disabled intentionally: user requested no hover shadow/movement on login card.
+        return;
+    },
+
+    _resetLoginCardFx() {
+        const card = document.getElementById('login-interactive-card');
+        if (card) {
+            card.style.transform = 'none';
+        }
+    },
+
+    _decodeJwtPayload(token) {
+        try {
+            const parts = String(token || '').split('.');
+            if (parts.length !== 3) return null;
+            const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+            const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+            return JSON.parse(atob(b64 + pad));
+        } catch (_) {
+            return null;
+        }
+    },
+
+    _clearSessionExpiryTimer() {
+        if (this._sessionExpiryTimer) {
+            clearTimeout(this._sessionExpiryTimer);
+            this._sessionExpiryTimer = null;
+        }
+    },
+
+    _scheduleSessionExpiry() {
+        this._clearSessionExpiryTimer();
+        if (!this._token || this._token === 'local') return;
+
+        const payload = this._decodeJwtPayload(this._token);
+        const expSeconds = Number(payload?.exp || 0);
+        if (!expSeconds) return;
+
+        const msUntilExpiry = (expSeconds * 1000) - Date.now();
+        if (msUntilExpiry <= 0) {
+            this.handleSessionExpired("Tu sesión expiró por tiempo de seguridad. Inicia sesión nuevamente.");
+            return;
+        }
+
+        this._sessionExpiryTimer = setTimeout(() => {
+            this.handleSessionExpired("Tu sesión expiró por tiempo de seguridad. Inicia sesión nuevamente.");
+        }, msUntilExpiry + 500);
+    },
+
+    _setLoginError(message) {
+        const errorEl = document.getElementById('login-error-msg');
+        if (!errorEl) return;
+        errorEl.textContent = message || 'No fue posible iniciar sesión.';
+        errorEl.classList.remove('hidden');
+    },
+
+    _clearLoginError() {
+        const errorEl = document.getElementById('login-error-msg');
+        if (!errorEl) return;
+        errorEl.textContent = '';
+        errorEl.classList.add('hidden');
+    },
+
+    handleAuthFailure(message) {
+        this._clearSessionExpiryTimer();
         this._token = null;
         this._user = null;
         localStorage.removeItem('user_token');
         localStorage.removeItem('user_info');
         window.location.hash = '#/';
-        location.reload();
+        this.showLogin();
+        this._setLoginError(message);
+    },
+
+    handleSessionExpired(message = "Tu sesión expiró por tiempo de seguridad. Inicia sesión nuevamente.") {
+        if (this._sessionExpiredHandled) return;
+        this._sessionExpiredHandled = true;
+        this._clearSessionExpiryTimer();
+        this._token = null;
+        this._user = null;
+        localStorage.removeItem('user_token');
+        localStorage.removeItem('user_info');
+        window.location.hash = '#/';
+        this.showLogin();
+        this._setLoginError(message);
+        setTimeout(() => window.alert(message), 80);
+    },
+
+    logout(reload = true) {
+        this._sessionExpiredHandled = false;
+        this._clearSessionExpiryTimer();
+        this._token = null;
+        this._user = null;
+        localStorage.removeItem('user_token');
+        localStorage.removeItem('user_info');
+        window.location.hash = '#/';
+        if (reload) {
+            location.reload();
+        } else {
+            this.showLogin();
+        }
     }
 };
 

@@ -34,13 +34,15 @@ pause
 # 3. Backend
 $BATCH_BACKEND = @"
 @echo off
+IF EXIST "$ROOT\.env.local.cmd" CALL "$ROOT\.env.local.cmd"
 SET "USE_TCP_CONNECTION=true"
 SET "DB_HOST=127.0.0.1"
 SET "DB_PORT=3306"
-SET "DB_USER=bosquebd"
-SET "DB_PASS=CHANGE_ME_DB_PASS"
-SET "DB_NAME=bosquebd"
-SET "CORS_ORIGINS_RAW=*"
+IF NOT DEFINED DB_USER echo ERROR: Falta DB_USER. Definelo en el entorno o en .env.local.cmd & pause & exit /b 1
+IF NOT DEFINED DB_PASS echo ERROR: Falta DB_PASS. Definelo en el entorno o en .env.local.cmd & pause & exit /b 1
+IF NOT DEFINED DB_NAME echo ERROR: Falta DB_NAME. Definelo en el entorno o en .env.local.cmd & pause & exit /b 1
+IF NOT DEFINED CORS_ORIGINS_RAW SET "CORS_ORIGINS_RAW=http://localhost:8080,http://127.0.0.1:8080,http://localhost:8000,http://127.0.0.1:8000"
+IF NOT DEFINED ALLOW_LOCAL_DEBUG_BYPASS SET "ALLOW_LOCAL_DEBUG_BYPASS=true"
 cd /d "$ROOT\backend"
 echo Iniciando Backend en puerto 8000...
 "$PYTHON" -m uvicorn app.main:app --reload --port 8000 --host 0.0.0.0

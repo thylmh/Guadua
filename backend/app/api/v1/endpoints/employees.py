@@ -4,7 +4,7 @@ import datetime
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import text
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_role
 from app.core.database import engine
 from app.core.constants import PAGO_EXPR
 from app.models.schemas import TramoFinanciacion
@@ -18,6 +18,7 @@ router = APIRouter()
 
 @router.get("/me")
 def check_session(user: Dict[str, Any] = Depends(get_current_user)):
+    require_role(user, ["admin", "user", "financiero", "talento", "nomina"])
     # Try to find name in BData if not already provided or if NOT local debug
     nombre = user.get("nombre", "Servidor")
     
@@ -61,6 +62,7 @@ def check_session(user: Dict[str, Any] = Depends(get_current_user)):
 @router.get("/me/notifications")
 def get_my_notifications(user: Dict[str, Any] = Depends(get_current_user), db: Session = Depends(get_db)):
     """ Retorna las notificaciones para el usuario autenticado """
+    require_role(user, ["admin", "user", "financiero", "talento", "nomina"])
     try:
         query = text("""
             SELECT id, mensaje, leido, fecha_creacion, tipo, solicitud_id
@@ -84,6 +86,7 @@ def get_my_notifications(user: Dict[str, Any] = Depends(get_current_user), db: S
 @router.post("/me/notifications/read-all")
 def mark_all_notifications_as_read(user: Dict[str, Any] = Depends(get_current_user), db: Session = Depends(get_db)):
     """ Marca todas las notificaciones como leídas """
+    require_role(user, ["admin", "user", "financiero", "talento", "nomina"])
     try:
         db.execute(text("UPDATE BNotificaciones SET leido = 1 WHERE usuario_email = :email"), {"email": user["email"]})
         db.commit()
@@ -94,6 +97,7 @@ def mark_all_notifications_as_read(user: Dict[str, Any] = Depends(get_current_us
 
 @router.get("/financiacion/{cedula}")
 def obtener_financiacion(cedula: str, _user: Dict[str, Any] = Depends(get_current_user)):
+    require_role(_user, ["admin", "user", "financiero", "talento", "nomina"])
     query = text(f"""
     WITH CalculosBase AS (
         SELECT 
@@ -185,6 +189,7 @@ def obtener_consulta_individual(
     _user: Dict[str, Any] = Depends(get_current_user),
     db: Session = Depends(get_db)  # NOTE: get_db is just a dependency, audit service uses its own engine connect
 ):
+    require_role(_user, ["admin", "user", "financiero", "talento", "nomina"])
     audit = AuditService(db)
     # Log READ Access to Financial Detail
     try:
@@ -275,7 +280,7 @@ def obtener_consulta_individual(
                 c_rows = conn.execute(text("SELECT codigo, nombre FROM dim_componentes")).fetchall()
                 comp_lookup = {r[0]: r[1] for r in c_rows}
                 
-                p_rows = conn.execute(text("SELECT Codigo, Nombre FROM dim_proyectos")).fetchall()
+                p_rows = conn.execute(text("SELECT codigo, nombre FROM dim_proyectos UNION SELECT codigo, nombre FROM dim_proyectos_otros")).fetchall()
                 proj_lookup = {r[0]: r[1] for r in p_rows}
             except: pass
 
@@ -473,6 +478,7 @@ def guardar_tramo(
     user: Dict[str, Any] = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    require_role(user, ["admin", "user", "financiero", "talento", "nomina"])
     if dato.fechaFin < dato.fechaInicio:
         raise HTTPException(status_code=400, detail="fechaFin no puede ser menor que fechaInicio.")
     
@@ -681,6 +687,7 @@ def guardar_tramo(
 @router.delete("/borrar/{id_f}")
 def eliminar_tramo(id_f: str, user: Dict[str, Any] = Depends(get_current_user), db: Session = Depends(get_db)):
     """ Solicita la eliminación de un tramo de financiación """
+    require_role(user, ["admin", "user", "financiero", "talento", "nomina"])
     try:
         old_values = None
         
@@ -761,6 +768,7 @@ def eliminar_tramo(id_f: str, user: Dict[str, Any] = Depends(get_current_user), 
         raise HTTPException(status_code=500, detail=str(e))
 @router.get("/catalogos")
 def obtener_catalogos(_user: Dict[str, Any] = Depends(get_current_user)):
+    require_role(_user, ["admin", "user", "financiero", "talento", "nomina"])
     try:
         dimensiones = {"fuentes": "dim_fuentes", "componentes": "dim_componentes", "subcomponentes": "dim_subcomponentes", "categorias": "dim_categorias", "responsables": "dim_responsables"}
         output = {}
@@ -787,6 +795,7 @@ def obtener_catalogos(_user: Dict[str, Any] = Depends(get_current_user)):
 @router.get("/solicitudes/pendientes/{cedula}")
 def listar_solicitudes_pendientes(cedula: str, user: dict = Depends(get_current_user), db: Session = Depends(get_db)):
     """ Retorna las solicitudes pendientes para una cédula específica """
+    require_role(user, ["admin", "user", "financiero", "talento", "nomina"])
     try:
         from sqlalchemy import text
         query = text("""

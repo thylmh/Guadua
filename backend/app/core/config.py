@@ -15,7 +15,12 @@ if _env_file.exists():
             y = yaml.safe_load(f)
             if y:
                 for k, v in y.items():
-                    if v is not None: os.environ[k] = str(v)
+                    if v is None:
+                        continue
+                    val = str(v).strip()
+                    if not val or val.startswith("CHANGE_ME_"):
+                        continue
+                    os.environ.setdefault(k, val)
         except Exception:
             pass
 
@@ -25,6 +30,8 @@ class Settings(BaseSettings):
     
     ALLOWED_DOMAIN: str = "humboldt.org.co"
     CORS_ORIGINS_RAW: str = ""
+    CORS_ORIGINS: str = ""
+    ALLOW_LOCAL_DEBUG_BYPASS: bool = False
     AUDIENCE: str = ""
     DB_USER: str = "bosquebd"
     DB_NAME: str = "bosquebd"
@@ -37,7 +44,7 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins(self) -> List[str]:
-        raw = self.CORS_ORIGINS_RAW.strip()
+        raw = (self.CORS_ORIGINS_RAW or self.CORS_ORIGINS).strip()
         if not raw or raw == "*":
             return ["*"]
         origins = [o.strip() for o in raw.split(",") if o.strip()]
@@ -47,7 +54,7 @@ class Settings(BaseSettings):
 
     @property
     def allow_credentials(self) -> bool:
-        raw = self.CORS_ORIGINS_RAW.strip()
+        raw = (self.CORS_ORIGINS_RAW or self.CORS_ORIGINS).strip()
         return raw != "*" and raw != ""
 
     class Config:

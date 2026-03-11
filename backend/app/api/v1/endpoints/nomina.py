@@ -24,7 +24,39 @@ async def upload_nomina(
     try:
         content = await file.read()
         decoded = content.decode('utf-8-sig')
-        reader = csv.DictReader(io.StringIO(decoded), delimiter=';')
+        
+        # Auto-detect delimiter (comma or semicolon)
+        sample = decoded[:2000]
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=',;\t')
+            delimiter = dialect.delimiter
+        except csv.Error:
+            # Fallback: count occurrences in first line
+            first_line = sample.split('\n')[0]
+            delimiter = ';' if first_line.count(';') > first_line.count(',') else ','
+        
+        reader = csv.DictReader(io.StringIO(decoded), delimiter=delimiter)
+        
+        # Normalize headers: lowercase + map alternative names
+        HEADER_MAP = {
+            'idproyecto': 'id_proyecto',
+            'idfuente': 'id_fuente',
+            'idcomponente': 'id_componente',
+            'idsubcomponente': 'id_subcomponente',
+            'idcategoria': 'id_categoria',
+            'idresponsable': 'id_responsable',
+        }
+        
+        def normalize_row(raw_row):
+            """Normalize a CSV row: lowercase keys & map alternative header names."""
+            normalized = {}
+            for k, v in raw_row.items():
+                if k is None:
+                    continue
+                key_lower = k.strip().lower()
+                mapped = HEADER_MAP.get(key_lower, key_lower)
+                normalized[mapped] = v.strip() if isinstance(v, str) else v
+            return normalized
         
         rows_to_insert = []
         now = datetime.datetime.now()
@@ -33,7 +65,9 @@ async def upload_nomina(
         first_row = True
         target_period = None
 
-        for row in reader:
+        for raw_row in reader:
+            row = normalize_row(raw_row)
+            
             if first_row:
                 fec = row.get('fec_liq')
                 if fec:
@@ -42,7 +76,8 @@ async def upload_nomina(
                 first_row = False
 
             try:
-                val = float(row.get('val_liq', 0).replace(',', '.') if isinstance(row.get('val_liq'), str) else row.get('val_liq', 0))
+                raw_val = row.get('val_liq', '0') or '0'
+                val = float(str(raw_val).replace(',', '.'))
             except:
                 val = 0
                 
@@ -56,7 +91,7 @@ async def upload_nomina(
                 "id_responsable": row.get('id_responsable'),
                 "val_liq": val,
                 "fec_liq": row.get('fec_liq'),
-                "nom_liq": row.get('nom_liq') or row.get('nom_emp'),
+                "nom_liq": row.get('nom_liq') or row.get('nom_con') or row.get('nom_emp'),
                 "fdec": row.get('fdec'),
                 "rubro": row.get('rubro'),
                 "fecha_carga": now
@@ -86,6 +121,7 @@ async def upload_nomina(
 @router.get("/nomina/summary")
 def get_nomina_summary(db: Session = Depends(get_db), user: Any = Depends(get_current_user)):
     """ Retorna un resumen de la nómina por mes """
+    require_role(user, ["admin", "financiero", "nomina"])
     try:
         query = text("""
             SELECT DATE_FORMAT(fec_liq, '%Y-%m') as periodo, 
@@ -117,6 +153,7 @@ def delete_nomina_month(periodo: str, db: Session = Depends(get_db), user: Any =
 @router.get("/nomina/ejecucion/fdec")
 def get_ejecucion_fdec(periodo: Optional[str] = None, db: Session = Depends(get_db), user: Any = Depends(get_current_user)):
     """ Resumen de ejecución por FDEC """
+    require_role(user, ["admin", "financiero", "nomina"])
     try:
         where_clause = ""
         params = {}
@@ -146,7 +183,37 @@ def get_reconciliation(
     """ 
     Conciliación: Compara lo pagado (BNomina) vs lo proyectado (BFinanciacion o Snapshot) 
     """
+    require_role(user, ["admin", "financiero", "nomina"])
     try:
+        # Mapa canónico de códigos de proyecto para preservar ceros a la izquierda (ej: 013 vs 13)
+        project_rows = db.execute(text("""
+            SELECT TRIM(codigo) as codigo FROM dim_proyectos
+            UNION
+            SELECT TRIM(codigo) as codigo FROM dim_proyectos_otros
+        """)).mappings().all()
+
+        canonical_project_codes = {}
+        for row in project_rows:
+            code = str(row.get("codigo") or "").strip()
+            if not code:
+                continue
+            canonical_project_codes[code] = code
+            if code.isdigit():
+                canonical_project_codes[str(int(code))] = code
+
+        def normalize_project_code(raw_code: Any) -> str:
+            code = str(raw_code or "").strip()
+            if not code:
+                return ""
+            if code in canonical_project_codes:
+                return canonical_project_codes[code]
+            if code.isdigit():
+                compact = str(int(code))
+                if compact in canonical_project_codes:
+                    return canonical_project_codes[compact]
+                return code.zfill(3) if len(code) < 3 else code
+            return code
+
         # 1. Obtener Real (BNomina) agrupado por la granularidad solicitada (Manejo de ONLY_FULL_GROUP_BY)
         query_real = text("""
             SELECT 
@@ -168,7 +235,9 @@ def get_reconciliation(
             WHERE DATE_FORMAT(n.fec_liq, '%Y-%m') = :p
             GROUP BY 1, 3, 4, 5, 6, 7, 8
         """)
-        real_data = db.execute(query_real, {"p": periodo}).mappings().all()
+        real_data = [dict(r) for r in db.execute(query_real, {"p": periodo}).mappings().all()]
+        for r in real_data:
+            r["cod_proyecto"] = normalize_project_code(r.get("cod_proyecto"))
 
         # 2. Obtener Proyectado (Snapshot o Actual)
         if version_id == 0:
@@ -202,7 +271,7 @@ def get_reconciliation(
                 AND f.fecha_fin >= STR_TO_DATE(CONCAT(:p, '-01'), '%Y-%m-%d')
                 AND c.estado LIKE 'Activo%'
             """)
-            proj_rows = db.execute(query_proj, {"p": periodo}).mappings().all()
+            proj_rows = [dict(r) for r in db.execute(query_proj, {"p": periodo}).mappings().all()]
     
         else:
             # USAR SNAPSHOT
@@ -235,14 +304,17 @@ def get_reconciliation(
                 AND s.fecha_inicio <= LAST_DAY(STR_TO_DATE(CONCAT(:p, '-01'), '%Y-%m-%d'))
                 AND s.fecha_fin >= STR_TO_DATE(CONCAT(:p, '-01'), '%Y-%m-%d')
             """)
-            proj_rows = db.execute(query_proj, {"vid": version_id, "p": periodo}).mappings().all()
+            proj_rows = [dict(r) for r in db.execute(query_proj, {"vid": version_id, "p": periodo}).mappings().all()]
+
+        for p in proj_rows:
+            p["cod_proyecto"] = normalize_project_code(p.get("cod_proyecto"))
     
         # Preparar para mensualizar
         tramos_dict = []
         for s in proj_rows:
             d = dict(s)
             # El servicio espera id_proyecto, id_fuente, etc. para la lógica interna
-            d["id_proyecto"] = d["cod_proyecto"]
+            d["id_proyecto"] = normalize_project_code(d.get("cod_proyecto"))
             d["id_fuente"] = d["cod_fuente"]
             d["id_componente"] = d["cod_componente"]
             d["id_subcomponente"] = d["cod_subcomponente"]
@@ -271,18 +343,14 @@ def get_reconciliation(
         combined = {}
         
         def get_key(d):
-            # Normalización de llaves de cruce: Manejar variaciones de nombres de campos
-            # (cod_proyecto vs id_proyecto, fuente vs cod_fuente, etc.)
+            # Cruce por la granularidad visible en UI: Cédula + Proyecto + Fuente + Responsable.
             ced = str(d.get('cedula') or d.get('cod_emp') or '').strip()
             
-            c_proy = str(d.get('cod_proyecto') or d.get('id_proyecto') or '').strip()
+            c_proy = normalize_project_code(d.get('cod_proyecto') or d.get('id_proyecto') or '')
             c_fuen = str(d.get('cod_fuente') or d.get('id_fuente') or d.get('fuente') or '').strip()
-            c_comp = str(d.get('cod_componente') or d.get('id_componente') or d.get('componente') or '').strip()
-            c_subc = str(d.get('cod_subcomponente') or d.get('id_subcomponente') or d.get('subcomponente') or '').strip()
-            c_cate = str(d.get('cod_categoria') or d.get('id_categoria') or d.get('categoria') or '').strip()
             c_resp = str(d.get('cod_responsable') or d.get('id_responsable') or d.get('responsable') or '').strip()
             
-            return f"{ced}|{c_proy}|{c_fuen}|{c_comp}|{c_subc}|{c_cate}|{c_resp}"
+            return f"{ced}|{c_proy}|{c_fuen}|{c_resp}"
 
         # Llenar con proyectado
         for p in proyectado_mes:
@@ -291,7 +359,7 @@ def get_reconciliation(
                 combined[k] = {
                     "cedula": p["cedula"],
                     "nombre": p.get("nombre") or p.get("cedula") or "Sin nombre",
-                    "cod_proyecto": p.get("id_proyecto", ""),
+                    "cod_proyecto": normalize_project_code(p.get("id_proyecto", "")),
                     "cod_fuente": p.get("id_fuente") or p.get("fuente", ""),
                     "cod_componente": p.get("id_componente") or p.get("componente", ""),
                     "cod_subcomponente": p.get("id_subcomponente") or p.get("subcomponente", ""),
@@ -309,7 +377,7 @@ def get_reconciliation(
                 combined[k] = {
                     "cedula": r["cedula"],
                     "nombre": r["nombre"],
-                    "cod_proyecto": r.get("cod_proyecto", ""),
+                    "cod_proyecto": normalize_project_code(r.get("cod_proyecto", "")),
                     "cod_fuente": r.get("cod_fuente", ""),
                     "cod_componente": r.get("cod_componente", ""),
                     "cod_subcomponente": r.get("cod_subcomponente", ""),
@@ -349,6 +417,7 @@ def get_nomina_dashboard(
     user: Any = Depends(get_current_user)
 ):
     """ Retorna KPIs y datos para el Dashboard de Nómina con filtros avanzados (v3) """
+    require_role(user, ["admin", "financiero", "nomina"])
     try:
         curr_year = anio if anio else datetime.datetime.now().year
         

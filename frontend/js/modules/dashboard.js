@@ -8,6 +8,14 @@ import { reporte } from './reporte.js';
 
 export const dashboard = {
     selectedYear: new Date().getFullYear(),
+    escapeHtml(value) {
+        return String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    },
     async render() {
         const container = document.getElementById('dashboard-view');
 
@@ -23,7 +31,42 @@ export const dashboard = {
             console.log("Dashboard Data Received:", data);
             document.getElementById('loader').classList.add('hidden');
 
-            const { kpis, dist_planta, dist_direccion, dist_direccion_costo, missing_financing, underfunded_alerts, overlap_alerts, inconsistency_alerts } = data;
+            const { kpis, underfunded_alerts } = data;
+            const esc = (v) => this.escapeHtml(v);
+
+            const dist_planta = (data.dist_planta || []).map(d => ({ ...d, label: esc(d.label) }));
+            const dist_direccion = (data.dist_direccion || []).map(d => ({ ...d, label: esc(d.label) }));
+            const dist_direccion_costo = (data.dist_direccion_costo || []).map(d => ({ ...d, label: esc(d.label) }));
+            const missing_financing = (data.missing_financing || []).map(m => ({
+                ...m,
+                nombre: esc(m.nombre),
+                cedula: esc(m.cedula)
+            }));
+            const overlap_alerts = (data.overlap_alerts || []).map(m => ({
+                ...m,
+                nombre: esc(m.nombre),
+                cedula: esc(m.cedula)
+            }));
+            const inconsistency_alerts = (data.inconsistency_alerts || []).map(m => ({
+                ...m,
+                nombre: esc(m.nombre),
+                cedula: esc(m.cedula),
+                tipo: esc(m.tipo),
+                msg: esc(m.msg)
+            }));
+            const matrix_proyectos = (data.matrix_proyectos || []).map(p => ({
+                ...p,
+                label: esc(p.label)
+            }));
+            const matrix_sin_finan = (data.matrix_sin_finan || []).map(row => ({
+                ...row,
+                label: esc(row.label)
+            }));
+            const matrix_costo_sin_finan = (data.matrix_costo_sin_finan || []).map(row => ({
+                ...row,
+                label: esc(row.label)
+            }));
+
             const totalAlerts = missing_financing.length + (underfunded_alerts?.length || 0) + overlap_alerts.length + (inconsistency_alerts?.length || 0);
 
             container.innerHTML = `
@@ -133,7 +176,7 @@ export const dashboard = {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${data.matrix_proyectos ? data.matrix_proyectos.map(p => {
+                                    ${matrix_proyectos ? matrix_proyectos.map(p => {
                 const labelLower = p.label.toLowerCase();
                 const isWarning = labelLower.includes('sin financiación') || labelLower.includes('sin financiacion');
                 const isInfo = labelLower.includes('incorporación') || labelLower.includes('incorporacion');
@@ -171,7 +214,7 @@ export const dashboard = {
                                     ${(() => {
                     const colTotals = Array(12).fill(0);
                     let grandTotal = 0;
-                    data.matrix_proyectos.forEach(p => {
+                    matrix_proyectos.forEach(p => {
                         p.months.forEach((m, i) => colTotals[i] += m);
                         grandTotal += p.total;
                     });
@@ -206,7 +249,7 @@ export const dashboard = {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${data.matrix_sin_finan && data.matrix_sin_finan.length > 0 ? data.matrix_sin_finan.map(row => `
+                                    ${matrix_sin_finan && matrix_sin_finan.length > 0 ? matrix_sin_finan.map(row => `
                                         <tr>
                                             <td style="font-weight: 600; color: #334155; position: sticky; left: 0; background: white; z-index: 4;">
                                                 • ${row.label}
@@ -224,8 +267,8 @@ export const dashboard = {
                                     ${(() => {
                     const colTotals = Array(12).fill(0);
                     let grandTotal = 0;
-                    if (data.matrix_sin_finan) {
-                        data.matrix_sin_finan.forEach(row => {
+                    if (matrix_sin_finan) {
+                        matrix_sin_finan.forEach(row => {
                             row.months.forEach((v, i) => colTotals[i] += v);
                         });
                         // The backend doesn't send the grand unique total directly, 
@@ -237,7 +280,7 @@ export const dashboard = {
                                                 <td style="padding: 12px; font-weight: 800; color: #0F172A;">TOTAL</td>
                                                 ${colTotals.map(t => `<td class="text-right" style="padding: 12px; font-weight: 800; color: #0F172A; font-size: 12px;">${t || '—'}</td>`).join('')}
                                                 <td class="text-right" style="padding: 12px; font-weight: 900; color: #EF4444; background: #FEF2F2; font-size: 13px;">
-                                                    ${data.matrix_sin_finan ? data.matrix_sin_finan.reduce((acc, r) => acc + r.total, 0) : 0}
+                                                    ${matrix_sin_finan ? matrix_sin_finan.reduce((acc, r) => acc + r.total, 0) : 0}
                                                 </td>
                                             </tr>
                                         `;
@@ -265,7 +308,7 @@ export const dashboard = {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    ${data.matrix_costo_sin_finan && data.matrix_costo_sin_finan.length > 0 ? data.matrix_costo_sin_finan.map(row => `
+                                    ${matrix_costo_sin_finan && matrix_costo_sin_finan.length > 0 ? matrix_costo_sin_finan.map(row => `
                                         <tr>
                                             <td style="font-weight: 600; color: #334155; position: sticky; left: 0; background: white; z-index: 4;">
                                                 💰 ${row.label}
@@ -283,8 +326,8 @@ export const dashboard = {
                                     ${(() => {
                     const colTotals = Array(12).fill(0);
                     let grandTotal = 0;
-                    if (data.matrix_costo_sin_finan) {
-                        data.matrix_costo_sin_finan.forEach(row => {
+                    if (matrix_costo_sin_finan) {
+                        matrix_costo_sin_finan.forEach(row => {
                             row.months.forEach((v, i) => colTotals[i] += v);
                             grandTotal += row.total;
                         });
@@ -380,7 +423,7 @@ export const dashboard = {
 
         } catch (err) {
             console.error(err);
-            container.innerHTML = `<div class="luxury-card" style="text-align: center; color: var(--danger);"><p>Error al cargar el dashboard: ${err.message}</p></div>`;
+            container.innerHTML = `<div class="luxury-card" style="text-align: center; color: var(--danger);"><p>Error al cargar el dashboard: ${this.escapeHtml(err.message)}</p></div>`;
         }
     },
 
@@ -417,11 +460,13 @@ export const dashboard = {
         data.forEach(item => {
             const val = item.total || item.value || 0;
             const pct = maxVal > 0 ? (val / maxVal * 100) : 0;
+            const safeLabel = this.escapeHtml(item.label);
+            const safeValue = this.escapeHtml(labelFn(item));
             container.innerHTML += `
                 <div class="mb-4">
                     <div class="flex justify-between mb-1" style="font-size: 11px; font-weight: 700;">
-                        <span style="color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;">${item.label}</span>
-                        <span style="color: #94A3B8;">${labelFn(item)}</span>
+                        <span style="color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;">${safeLabel}</span>
+                        <span style="color: #94A3B8;">${safeValue}</span>
                     </div>
                     <div style="height: 6px; background: #F1F5F9; border-radius: 10px; overflow: hidden;">
                         <div style="height: 100%; width: ${pct}%; background: var(--chart-1, #0F172A); border-radius: 10px;"></div>
@@ -433,11 +478,12 @@ export const dashboard = {
 
     kpiCard() { /* Deprecated in favor of kpiModern */ },
     renderUserWelcome(container) {
+        const safeFirstName = this.escapeHtml((auth._user?.nombre || '').split(' ')[0] || 'Usuario');
         container.innerHTML = `
             <div style="padding: 100px 40px; text-align: center; max-width: 800px; margin: 0 auto;">
                 <div style="font-size: 80px; margin-bottom: 32px; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.1));">✨</div>
                 <h1 style="font-family: 'Outfit'; font-size: 48px; font-weight: 800; color: #0F172A; letter-spacing: -0.04em; margin-bottom: 16px;">
-                    ¡Hola de nuevo, ${auth._user.nombre.split(' ')[0]}!
+                    ¡Hola de nuevo, ${safeFirstName}!
                 </h1>
                 <p style="font-family: 'Outfit'; font-size: 18px; color: #64748B; line-height: 1.6; margin-bottom: 40px;">
                     Tu panel de control personal está listo. Consulta el estado de tu liquidación 
@@ -477,8 +523,8 @@ export const dashboard = {
                         <tbody>
                             ${rows.map(r => `
                                 <tr>
-                                    <td>${r.nombre_proyecto || 'N/A'}</td>
-                                    <td>${r.gerencia || 'General'}</td>
+                                    <td>${this.escapeHtml(r.nombre_proyecto || 'N/A')}</td>
+                                    <td>${this.escapeHtml(r.gerencia || 'General')}</td>
                                     <td class="text-right matrix-money">${ui.moneyCompact(r.months[0])}</td>
                                     <td class="text-right matrix-money">${ui.moneyCompact(r.months[1])}</td>
                                     <td class="text-right matrix-money">${ui.moneyCompact(r.months[2])}</td>

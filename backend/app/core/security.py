@@ -28,26 +28,12 @@ def verify_google_token(token: str) -> Dict[str, Any]:
 async def get_current_user(
     authorization: Optional[str] = Header(default=None, alias="Authorization"),
 ) -> Dict[str, Any]:
-    # Bypass for local development
-    if not authorization or authorization in ["Bearer undefined", "Bearer null", "Bearer local"]:
-        # Try to connect to DB to verify we are actually online
-        try:
-            with engine.connect() as conn:
-                pass
-        except Exception:
-             # DB Down -> Only then return Mock
-             return {
-                "email": "hbettin@humboldt.org.co",
-                "role": "admin",
-                "nombre": "Desarrollador Local (Offline)",
-                "source": "local_debug_offline"
-            }
-        
-        # If DB is up, we return the Dev User but mark it as such
+    # Explicit and disabled-by-default local bypass (safe for production)
+    if settings.ALLOW_LOCAL_DEBUG_BYPASS and authorization == "Bearer local":
         return {
-            "email": "hbettin@humboldt.org.co",
+            "email": "dev@localhost",
             "role": "admin",
-            "nombre": "Desarrollador Local (DB Connected)",
+            "nombre": "Desarrollador Local",
             "source": "local_debug"
         }
 
@@ -102,5 +88,6 @@ async def get_current_user(
     return {"email": email, "role": role, "nombre": nombre_completo, "source": "db"}
 
 def require_role(user: Dict[str, Any], allowed: List[str]) -> None:
-    if user.get("role") not in allowed:
+    role = user.get("role")
+    if role not in allowed:
         raise HTTPException(status_code=403, detail="No tienes permisos para esta operación.")

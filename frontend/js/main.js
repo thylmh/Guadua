@@ -17,7 +17,7 @@ import { nomina } from './modules/nomina.js';
 import { renderChatbotWidget } from './modules/chatbot.js';
 
 // VERSION CONTROL
-const APP_VERSION = '2.4.5-BUDGET-DYNAMIC-YEARS';
+const APP_VERSION = '2.4.6-UPDATE';
 
 // Clear cache if version mismatch
 const storedVersion = localStorage.getItem('APP_VERSION');
@@ -44,6 +44,29 @@ window.financiero = financiero; // Expose global
 window.individual = individual; // Needed for inline clicks in Nomina
 window.ui = ui; // Needed for onclick handlers in modals
 window.showReporteDetallado = () => reporte.render();
+
+const bindAmbientPointer = () => {
+    if (!window.matchMedia('(pointer: fine)').matches) return;
+
+    document.addEventListener('pointermove', (ev) => {
+        document.body.style.setProperty('--pointer-x', `${ev.clientX}px`);
+        document.body.style.setProperty('--pointer-y', `${ev.clientY}px`);
+    }, { passive: true });
+};
+
+const animateVisibleCards = () => {
+    const currentView = document.querySelector('.view:not(.hidden)');
+    if (!currentView) return;
+
+    const targets = currentView.querySelectorAll('.action-card, .luxury-card, .impact-card, .table-wrap');
+    targets.forEach((el, idx) => {
+        el.classList.remove('reveal-item', 'reveal-active');
+        el.style.setProperty('--reveal-delay', `${Math.min(idx * 55, 380)}ms`);
+        // Force reflow so animation restarts on route change
+        void el.offsetWidth;
+        el.classList.add('reveal-item', 'reveal-active');
+    });
+};
 
 const router = async () => {
     const hash = window.location.hash || '#/home';
@@ -108,8 +131,13 @@ const router = async () => {
                 }, 100);
             }
         } else if (hash === '#/solicitudes') {
-            document.getElementById('solicitudes-view').classList.remove('hidden');
-            await gestionSolicitudes.load();
+            const role = auth._user?.role;
+            if (role === 'admin' || role === 'financiero' || role === 'nomina') {
+                document.getElementById('solicitudes-view').classList.remove('hidden');
+                await gestionSolicitudes.load();
+            } else {
+                window.location.hash = '#/home';
+            }
         } else if (hash === '#/nomina') {
             document.getElementById('nomina-view').classList.remove('hidden');
             await nomina.load();
@@ -136,6 +164,8 @@ const router = async () => {
                 window.location.hash = '#/home';
             }
         }
+
+        animateVisibleCards();
     }
 };
 
@@ -170,7 +200,11 @@ const checkNotifications = async () => {
             headers: { 'Authorization': `Bearer ${auth._token}` }
         });
 
-        if (!res.ok) return; // Silent skip if error or 401
+        if (res.status === 401) {
+            auth.handleSessionExpired('Tu sesión expiró por tiempo de seguridad. Inicia sesión nuevamente.');
+            return;
+        }
+        if (!res.ok) return; // Silent skip for non-auth errors
 
         const notifs = await res.json();
         if (!Array.isArray(notifs)) return;
@@ -189,6 +223,13 @@ const checkNotifications = async () => {
 
 const showNotificationsModal = async () => {
     try {
+        const esc = (value) => String(value ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+
         ui.showLoading("Cargando notificaciones...");
         const notifs = await api.get('/employees/me/notifications');
         ui.hideLoading();
@@ -210,7 +251,7 @@ const showNotificationsModal = async () => {
                             </span>
                             <span style="font-size: 10px; color: #94A3B8; font-weight: 600;">${new Date(n.fecha_creacion).toLocaleString('es-CO')}</span>
                         </div>
-                        <div style="font-size: 13px; font-weight: 500; color: #334155; line-height: 1.5;">${n.mensaje}</div>
+                        <div style="font-size: 13px; font-weight: 500; color: #334155; line-height: 1.5;">${esc(n.mensaje)}</div>
                     </div>
                 `).join('')}
             </div>
@@ -237,6 +278,7 @@ const showNotificationsModal = async () => {
 
 const init = () => {
     window.addEventListener('hashchange', router);
+    bindAmbientPointer();
 
     // Global Event Listeners
     document.getElementById('btn-search')?.addEventListener('click', () => {

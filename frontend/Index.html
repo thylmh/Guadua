@@ -19,7 +19,7 @@
     <link href="https://unpkg.com/tabulator-tables@6.2.1/dist/css/tabulator_modern.min.css" rel="stylesheet">
     <script type="text/javascript" src="https://unpkg.com/tabulator-tables@6.2.1/dist/js/tabulator.min.js"></script>
 
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap"
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Sora:wght@400;500;600;700;800&display=swap"
         rel="stylesheet">
 </head>
 
@@ -27,7 +27,7 @@
     <div id="app">
         <!-- Global Loader (Premium Edition) -->
         <div id="loader" class="hidden"
-            style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: white; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(20px);">
+            style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(180deg, #f9fbfa 0%, #f6f8f9 52%, #f3f6f7 100%); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
 
             <!-- Logo with Fluid Gradient Mask -->
             <div class="loader-logo-container">
@@ -76,6 +76,14 @@
                 animation: fluid-color 4s infinite ease-in-out;
             }
 
+            .login-logo.loader-logo-fluid {
+                width: 88px !important;
+                height: 88px !important;
+                margin: 0 auto 20px auto;
+                display: block;
+                flex: 0 0 auto;
+            }
+
             @keyframes fluid-color {
                 0% {
                     background-position: 0% 50%;
@@ -117,36 +125,58 @@
         </style>
 
         <!-- Login View -->
-        <div id="login-view" class="hidden"
-            style="max-width: 440px; margin: 12vh auto; text-align: center; padding: 48px; background: white; border-radius: 32px; border: 1px solid #F1F5F9; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.05);">
-            <img src="https://cdn.prod.website-files.com/64bea006689ebc2d5d9499ad/65832356e8b3b761ff6baaec_Logo%20Humboldt%20Negro.svg"
-                alt="Logo Humboldt" style="height: 85px; margin-bottom: 32px;">
-            <h1 class="guadua-animate"
-                style="font-size: 36px; font-weight: 900; letter-spacing: 0.15em; margin-bottom: 12px; text-transform: uppercase;">
-                GUADUA</h1>
-            <p
-                style="color: #64748B; font-size: 14px; margin-bottom: 40px; font-weight: 500; line-height: 1.5; max-width: 320px; margin-left: auto; margin-right: auto;">
-                Herramienta sustentada en bases sólidas que permite articular la planeación de la nómina del Instituto
-            </p>
+        <div id="login-view" class="hidden login-shell">
+            <div class="login-grid">
+                <section class="login-story">
+                    <span class="login-pill">Proyección de Nómina Inteligente 2026</span>
+                    <h2>Convierte datos dispersos en decisiones rápidas y confiables.</h2>
+                    <p>
+                        Planeación, conciliación y seguimiento en una experiencia visual más clara para equipos
+                        financieros, talento y nómina.
+                    </p>
 
-            <div id="google-login-btn" style="display: flex; justify-content: center; margin-bottom: 24px;"></div>
+                    <div class="login-metrics">
+                        <article>
+                            <strong>486</strong>
+                            <span>Trabajadores activos</span>
+                        </article>
+                        <article>
+                            <strong>Nómina + Presupuesto</strong>
+                            <span>Planeación integrada</span>
+                        </article>
+                        <article>
+                            <strong>Actualización continua</strong>
+                            <span>Alertas y trazabilidad</span>
+                        </article>
+                    </div>
+                </section>
 
-            <div id="dev-access-container" class="hidden">
-                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 24px;">
-                    <div style="flex: 1; height: 1px; background: #F1F5F9;"></div>
-                    <div
-                        style="color: #94A3B8; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em;">
-                        Acceso Alternativo</div>
-                    <div style="flex: 1; height: 1px; background: #F1F5F9;"></div>
-                </div>
+                <section id="login-interactive-card" class="login-panel">
+                    <div class="login-logo loader-logo-fluid" role="img" aria-label="Logo Humboldt"></div>
+                    <h1 class="guadua-animate login-title">GUADUA</h1>
+                    <p class="login-subtitle">
+                        Herramienta sustentada en bases sólidas para articular la planeación de nómina del Instituto.
+                    </p>
 
-                <button id="dev-login-btn" class="btn btn-ghost"
-                    style="width: 100%; justify-content: center; height: 48px; border-radius: 14px; border: 1px solid #E2E8F0; font-weight: 700; color: #475569;">
-                    Iniciar Modo Desarrollador
-                </button>
+                    <div id="google-login-btn" class="login-google-slot"></div>
+                    <div id="login-error-msg" class="login-error hidden"></div>
+
+                    <div id="dev-access-container" class="hidden login-dev-access">
+                        <div class="login-divider">
+                            <span>Acceso Alternativo</span>
+                        </div>
+
+                        <button id="dev-login-btn" class="btn btn-ghost login-dev-btn">
+                            Iniciar Modo Desarrollador
+                        </button>
+                    </div>
+
+                    <p class="login-footer">
+                        © 2026 Instituto Alexander von Humboldt.<br>
+                        Inteligencia de Datos para la Conservación.
+                    </p>
+                </section>
             </div>
-            <p style="margin-top: 32px; font-size: 11px; color: #94A3B8; line-height: 1.5;">© 2026 Instituto Alexander
-                von Humboldt. <br> Inteligencia de Datos para la Conservación.</p>
         </div>
 
         <!-- Authenticated Layout -->
@@ -168,7 +198,7 @@
                                 class="nav-icon">📈</span> <span>Financiero</span></a>
                         <a href="#/vacantes" class="tab-btn talento-access hidden"><span class="nav-icon">🏢</span>
                             <span>Vacantes</span></a>
-                        <a href="#/solicitudes" class="tab-btn"><span class="nav-icon">📝</span>
+                        <a href="#/solicitudes" class="tab-btn admin-only financiero-access nomina-access hidden"><span class="nav-icon">📝</span>
                             <span>Solicitudes</span></a>
                         <a href="#/nomina" class="tab-btn financiero-access admin-only nomina-access hidden"><span
                                 class="nav-icon">📦</span> <span>Nómina</span></a>
@@ -252,21 +282,21 @@
                         </div>
 
                         <!-- Card 4: Solicitudes -->
-                        <div class="action-card" onclick="window.location.hash='#/solicitudes'">
+                        <div class="action-card admin-only financiero-access nomina-access hidden" onclick="window.location.hash='#/solicitudes'">
                             <div class="card-icon">📝</div>
                             <h3>Aprobación de Cambios</h3>
                             <p>Auditoría y aprobación de modificaciones presupuestales y novedades de tramos.</p>
                             <div class="card-cta">Revisar Solicitudes <span>→</span></div>
                         </div>
 
+
                         <!-- Card 5: Nómina -->
                         <div class="action-card financiero-access admin-only nomina-access hidden"
                             onclick="window.location.hash='#/nomina'">
                             <div class="card-icon">📦</div>
-                            <h3>Carga de Nómina</h3>
-                            <p>Registro mensual de liquidaciones procesadas en el sistema Novasoft para conciliación.
-                            </p>
-                            <div class="card-cta">Cargar Archivo <span>→</span></div>
+                            <h3>Gestión de Nómina</h3>
+                            <p>Conciliación y análisis de liquidaciones reales procesadas en Novasoft.</p>
+                            <div class="card-cta">Entrar al Módulo <span>→</span></div>
                         </div>
 
                         <!-- Card 6: Vacantes -->

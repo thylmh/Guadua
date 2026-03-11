@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
-from app.core.security import get_current_user
+from app.core.security import get_current_user, require_role
 from app.core.database import engine
 from sqlalchemy import text
 from app.models.schemas import TramoFinanciacion
@@ -17,6 +17,7 @@ def get_vacantes_dashboard(user: Dict[str, Any] = Depends(get_current_user)):
     Calcula el costo proyectado de las vacantes.
     Intenta leer de la DB, si falla usa Mock Data.
     """
+    require_role(user, ["admin", "talento", "nomina"])
     try:
         # 1. Intentar obtener incrementos reales
         with engine.connect() as conn:
@@ -97,6 +98,7 @@ def get_individual_vacante(id_posicion: str, user: Dict[str, Any] = Depends(get_
     """
     Obtiene el detalle de una vacante y su financiación proyectada.
     """
+    require_role(user, ["admin", "talento", "nomina"])
     try:
         # 1. Buscar cabecera de la posición
         with engine.connect() as conn:
@@ -164,6 +166,7 @@ def save_tramo_vacante(dato: TramoFinanciacion, user: Dict[str, Any] = Depends(g
     """
     Guarda un tramo de financiación para una vacante.
     """
+    require_role(user, ["admin", "talento", "nomina"])
     try:
         # En modo mock, guardamos en la lista global
         new_tramo = {

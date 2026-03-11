@@ -13,6 +13,20 @@ const CONFIG = {
 export const api = {
     _loadingCount: 0,
 
+    async _extractErrorDetail(response, fallback = 'Error en la petición') {
+        try {
+            const payload = await response.clone().json();
+            return payload?.detail || fallback;
+        } catch (_) {
+            try {
+                const txt = await response.text();
+                return txt || fallback;
+            } catch (_) {
+                return fallback;
+            }
+        }
+    },
+
     async request(endpoint, options = {}, silent = false) {
         if (!silent) {
             this._loadingCount++;
@@ -30,13 +44,17 @@ export const api = {
             const response = await fetch(url, { ...options, headers });
 
             if (response.status === 401) {
-                auth.logout();
+                const detail = await this._extractErrorDetail(
+                    response,
+                    'Tu sesión expiró por tiempo de seguridad. Inicia sesión nuevamente.'
+                );
+                auth.handleSessionExpired(detail);
                 return null;
             }
 
             if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || 'Error en la petición');
+                const detail = await this._extractErrorDetail(response, 'Error en la petición');
+                throw new Error(detail);
             }
 
             return response.json();
@@ -73,9 +91,17 @@ export const api = {
         const url = `${CONFIG.BASE_URL}${endpoint}`;
         try {
             const response = await fetch(url, options);
+            if (response.status === 401) {
+                const detail = await this._extractErrorDetail(
+                    response,
+                    'Tu sesión expiró por tiempo de seguridad. Inicia sesión nuevamente.'
+                );
+                auth.handleSessionExpired(detail);
+                return null;
+            }
             if (!response.ok) {
-                const error = await response.json();
-                throw new Error(error.detail || 'Error al subir archivo');
+                const detail = await this._extractErrorDetail(response, 'Error al subir archivo');
+                throw new Error(detail);
             }
             return response.json();
         } finally {

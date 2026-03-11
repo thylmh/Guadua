@@ -320,7 +320,7 @@ export const usuarios = {
                             emailInput.style.backgroundColor = '#F0F9FF';
                             setTimeout(() => emailInput.style.backgroundColor = '', 1000);
                         }
-                        statusP.innerHTML = `<span style="color:#059669">✓ Encontrado:</span> <strong>${res.nombre}</strong>`;
+                        statusP.textContent = `✓ Encontrado: ${res.nombre || ''}`;
                         statusP.style.color = '#059669';
                     } else if (res && res.error) {
                         statusP.textContent = `⚠️ Error DB: ${res.error.substring(0, 50)}`;

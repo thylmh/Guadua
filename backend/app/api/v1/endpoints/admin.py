@@ -413,6 +413,7 @@ def get_flujo_caja(anio: Optional[int] = None, user: Dict[str, Any] = Depends(ge
         # Optimized query with date filters to reduce processing
         query_sql = text("""
             SELECT f.*, c.atep, c.gerencia, c.id_contrato, c.fecha_ingreso, c.estado, c.fecha_terminacion_real, 
+                   c.fecha_terminacion, p.Planta, p.Tipo_planta, p.Base_Fuente,
                    p.cargo, p.banda, p.familia, p.IDPosicion AS posicion_c, p.Direccion, 
                    CONCAT_WS(' ', d.p_nombre, d.s_nombre, d.p_apellido, d.s_apellido) AS nombre_completo 
             FROM BFinanciacion f 
@@ -489,7 +490,11 @@ def get_flujo_caja(anio: Optional[int] = None, user: Dict[str, Any] = Depends(ge
                             "posicion_c": d.get("posicion_c", ""),
                             "cargo": d.get("cargo", ""),
                             "Direccion": d.get("Direccion", ""),
-                            "gerencia": d.get("gerencia", "").replace("Gerencia de Centro", "Centro") if d.get("gerencia") else "Grupo de Trabajo"
+                            "gerencia": d.get("gerencia", "").replace("Gerencia de Centro", "Centro") if d.get("gerencia") else "Grupo de Trabajo",
+                            "fecha_terminacion": d.get("fecha_terminacion"),
+                            "Planta": d.get("Planta"),
+                            "Tipo_planta": d.get("Tipo_planta"),
+                            "Base_Fuente": d.get("Base_Fuente")
                         }, 
                         "months": {}
                     }
@@ -575,7 +580,7 @@ def get_flujo_caja(anio: Optional[int] = None, user: Dict[str, Any] = Depends(ge
 def get_mensualizado_global(user: Dict[str, Any] = Depends(get_current_user)):
     require_role(user, ["admin", "financiero", "talento", "nomina"])
     try:
-        query_sql = text("SELECT f.*, c.atep, c.gerencia, c.id_contrato, c.estado, c.fecha_terminacion_real, p.cargo, p.banda, p.familia, p.IDPosicion AS posicion_c, p.Direccion, CONCAT_WS(' ', d.p_nombre, d.s_nombre, d.p_apellido, d.s_apellido) AS nombre_completo FROM BFinanciacion f JOIN BContrato c ON f.id_contrato = c.id_contrato JOIN BData d ON c.cedula = d.cedula LEFT JOIN BPosicion p ON c.posicion = p.IDPosicion")
+        query_sql = text("SELECT f.*, c.atep, c.gerencia, c.id_contrato, c.estado, c.fecha_terminacion_real, c.fecha_terminacion, p.Planta, p.Tipo_planta, p.Base_Fuente, p.cargo, p.banda, p.familia, p.IDPosicion AS posicion_c, p.Direccion, CONCAT_WS(' ', d.p_nombre, d.s_nombre, d.p_apellido, d.s_apellido) AS nombre_completo FROM BFinanciacion f JOIN BContrato c ON f.id_contrato = c.id_contrato JOIN BData d ON c.cedula = d.cedula LEFT JOIN BPosicion p ON c.posicion = p.IDPosicion")
         with engine.connect() as conn:
             rows = conn.execute(query_sql).mappings().all()
             incs_rows = conn.execute(text("SELECT * FROM BIncremento")).mappings().all()
@@ -1005,7 +1010,7 @@ def get_audit_stats(user: Dict[str, Any] = Depends(get_current_user), db: Sessio
 
 @router.get("/reporte-cars")
 def get_reporte_cars(anio: Optional[int] = None, user: Dict[str, Any] = Depends(get_current_user)):
-    require_role(user, ["admin", "financiero", "talento", "nomina"])
+    require_role(user, ["admin", "financiero", "user", "talento", "nomina"])
     
     # Helper for formatting "Code | Name"
     def fmt_val(val, mapping):

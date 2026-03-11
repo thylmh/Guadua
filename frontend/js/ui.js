@@ -417,7 +417,7 @@ export const ui = {
                 const isAdmin = auth.isAdmin();
                 const isFinanciero = auth._user?.role === 'financiero';
                 const now = new Date();
-                const isWindowOpen = now.getDate() <= 6; // Only days 1-6
+                const isWindowOpen = now.getDate() < 6; // Only days 1-5
 
                 const tDate = new Date(t.fecha_fin);
                 const currentPeriod = now.getFullYear() * 12 + now.getMonth();
